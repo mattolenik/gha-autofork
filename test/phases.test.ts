@@ -39,6 +39,7 @@ describe('isolated phases', () => {
     const old = await originSha();
     const { prepared, next } = await prepareCandidate({ sandbox: process.platform === 'linux' });
     expect(await originSha()).toBe(old);
+    if (patchless) expect(prepared.agentCalls).toBe(0);
     const verified = await runPhase({ ...next, phase: 'verify' }, env(), { log });
     expect(verified.state, verified.reason).toBe('VERIFIED');
     expect(await originSha()).toBe(old);
@@ -51,8 +52,56 @@ describe('isolated phases', () => {
     await expect(fs.access(path.join(env().runnerTemp, 'autopatch-publish/repo/README.md'))).rejects.toThrow();
   });
 
-  it.each([{ publish: 'stage' as const }, { verifyCommand: undefined }, { reviewer: undefined }, { initialBase: undefined }])('stages when policy requires it: %j', async overrides => {
+  it('initializes an unchanged fork without bundling its existing history', async () => {
+    fx = await createFixture();
+    const prepared = await run(inputs(), env(), { log, createBackend: () => new FakeBackend(undefined, {}) });
+    expect(prepared.state, prepared.reason).toBe('PREPARED');
+    expect(prepared.agentCalls).toBe(0); // nothing to replay, so no agent judgement is needed
+    expect(prepared.outcome!.records.map((r) => r.newSha)).toEqual(fx.patchShas);
+    const manifest = JSON.parse(await fs.readFile(path.join(prepared.artifactDir!, 'candidate.json'), 'utf8')) as { bundleDigest: string | null };
+    expect(manifest.bundleDigest).toBeNull();
+    const next = { ...inputs(), artifactDir: prepared.artifactDir!, candidateDigest: prepared.artifactDigest! };
+    const verified = await runPhase({ ...next, phase: 'verify' }, env(), { log });
+    expect(verified.state, verified.reason).toBe('VERIFIED');
+    const published = await runPhase({ ...next, phase: 'publish', verificationDir: verified.artifactDir!, verificationDigest: verified.artifactDigest! }, env(), { log });
+    expect(published.state, published.reason).toBe('APPROVED');
+    expect(await originSha()).toBe(fx.patchShas[2]);
+    expect(await fx.fork.out(['ls-remote', 'origin', checkpointRef('main')])).toContain(fx.base);
+  });
+
+  it('reuses trusted artifacts across attempts and recognizes an already-completed atomic publication', async () => {
     fx = await createFixture({ patches: [] });
+    const { next } = await prepareCandidate({ reviewer: undefined });
+    const verified = await runPhase({ ...next, phase: 'verify' }, { ...env(), runAttempt: '2' }, { log });
+    expect(verified.state, verified.reason).toBe('VERIFIED');
+    const publishInputs = { ...next, phase: 'publish' as const, verificationDir: verified.artifactDir!, verificationDigest: verified.artifactDigest! };
+    const first = await runPhase(publishInputs, { ...env(), runAttempt: '3' }, { log });
+    expect(first.state, first.reason).toBe('FAST_FORWARDED');
+    const refs = await fx.fork.out(['ls-remote', 'origin']);
+    const retried = await runPhase(publishInputs, { ...env(), runAttempt: '4' }, { log });
+    expect(retried.state, retried.reason).toBe('FAST_FORWARDED');
+    expect(retried.reason).toContain('already published');
+    expect(retried.publish!.backupRef).toBe(first.publish!.backupRef);
+    expect(await fx.fork.out(['ls-remote', 'origin'])).toBe(refs);
+    const otherRun = await runPhase(publishInputs, { ...env(), runId: 'another-run' }, { log });
+    expect(otherRun.state).toBe('FAILED_TAMPERED');
+  });
+
+  it('stages completed contested candidates even when publish=auto is requested', async () => {
+    fx = await createFixture();
+    await advanceUpstream(fx, { 'upstream.txt': 'new\n' }, 'upstream');
+    const failed = await run(inputs(), env(), { log, createBackend: () => new FakeBackend(undefined, { review: [{ verdict: 'reject', summary: 'needs attention' }] }) });
+    expect(failed.state).toBe('FAILED_CONTESTED');
+    const staged = await runPhase({ ...inputs(), phase: 'publish', artifactDir: failed.artifactDir!, candidateDigest: failed.artifactDigest! }, env(), { log });
+    expect(staged.state, staged.reason).toBe('STAGED');
+    expect(staged.reason).toContain('contested rescue');
+    expect(await originSha()).toBe(fx.patchShas[2]);
+    expect(await fx.fork.out(['ls-remote', 'origin', `refs/heads/${staged.tempBranch}`])).toContain(failed.headSha!);
+    expect(await fx.fork.out(['ls-remote', 'origin', checkpointRef('main')])).toBe('');
+  });
+
+  it.each([{ publish: 'stage' as const }, { verifyCommand: undefined }, { reviewer: undefined }, { initialBase: undefined }])('stages when policy requires it: %j', async overrides => {
+    fx = await createFixture();
     const old = await originSha();
     const { next } = await prepareCandidate(overrides);
     const verified = await runPhase({ ...next, phase: 'verify' }, env(), { log });
@@ -148,6 +197,8 @@ describe('isolated phases', () => {
       update: async () => ({ data: { html_url: 'https://example/issue' } }), createComment: async () => undefined,
     } });
     expect(reported.notes).toContain('issue: https://example/issue');
+    expect(reported.state).toBe('REPORTED');
+    expect(reported.reportedFailureState).toBe('FAILED_CONTESTED');
     expect(bodies[0]).toContain('Recover a completed candidate');
     expect(bodies[0]).not.toContain('git push --force-with-lease');
     expect(await originSha()).toBe(fx.patchShas[2]);

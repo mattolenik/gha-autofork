@@ -100,6 +100,19 @@ export async function listBackups(git: Git, branch: string): Promise<string[]> {
     .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
 }
 
+/** Reconcile an earlier attempt whose atomic push succeeded but whose job did not finish. */
+export async function findPublishedCandidate(git: Git, branch: string, runId: string, original: string, head: string, upstream: string): Promise<string | undefined> {
+  const lines = await git.lines(['ls-remote', 'origin', `refs/heads/${branch}`, checkpointRef(branch), `${BACKUP_PREFIX}*/${branch}`]);
+  const refs = new Map(lines.map(line => { const [sha, ref] = line.split('\t'); return [ref!, sha!]; }));
+  if (refs.get(`refs/heads/${branch}`) !== head || refs.get(checkpointRef(branch)) !== upstream) return undefined;
+  return [...refs].find(([ref, sha]) => {
+    if (sha !== original || !ref.startsWith(BACKUP_PREFIX)) return false;
+    const [stamp = '', ...parts] = ref.slice(BACKUP_PREFIX.length).split('/');
+    const prefix = `${runId}-`;
+    return parts.join('/') === branch && /^\d{8}-/.test(stamp) && stamp.slice(9).startsWith(prefix) && /^\d+$/.test(stamp.slice(9 + prefix.length));
+  })?.[0];
+}
+
 async function pruneBackups(git: Git, branch: string, keep: number, log: Logger): Promise<string[]> {
   const refs = await listBackups(git, branch);
   const excess = refs.slice(0, Math.max(0, refs.length - keep));

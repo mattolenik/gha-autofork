@@ -6,13 +6,13 @@ import { AutopatchError } from './errors.js';
 import { runGates } from './gates.js';
 import type { Inputs } from './inputs.js';
 import { closeFailureIssue, upsertFailureIssue } from './issue.js';
-import { fetchCheckpoint, listLeftoverBranches, publishBranch, pushTempBranch, tempBranchName } from './publish.js';
+import { fetchCheckpoint, findPublishedCandidate, listLeftoverBranches, publishBranch, pushTempBranch, tempBranchName } from './publish.js';
 import { renderSummary, writeResults, type RunReport } from './report.js';
 import type { RunDeps, RunEnv } from './run.js';
 import { assertCandidate } from './state.js';
 
 function checkContext(candidate: Candidate, inputs: Inputs, env: RunEnv): void {
-  if (candidate.runId !== env.runId || candidate.runAttempt !== env.runAttempt || candidate.repository !== inputs.repository ||
+  if (candidate.runId !== env.runId || candidate.repository !== inputs.repository ||
     candidate.upstream !== inputs.upstream || (inputs.branch && candidate.branch !== inputs.branch) ||
     (inputs.upstreamBranch && candidate.upstreamBranch !== inputs.upstreamBranch) || candidate.verifyCommand !== (inputs.verifyCommand ?? null)) {
     throw new AutopatchError('FAILED_TAMPERED', 'candidate does not match this run, repository, branch, upstream, or verification command');
@@ -35,12 +35,21 @@ export async function runPhase(inputs: Inputs, env: RunEnv, deps: RunDeps): Prom
     if (failed.repository !== inputs.repository || failed.upstream !== inputs.upstream || failed.runId !== env.runId || !failed.state.startsWith('FAILED_')) {
       throw new AutopatchError('FAILED_TAMPERED', 'failure report does not match this run');
     }
+    if (inputs.rescueBranch) {
+      const prefix = tempBranchName(env.runId, '');
+      if (!inputs.rescueBranch.startsWith(prefix) || !/^\d+$/.test(inputs.rescueBranch.slice(prefix.length))) throw new AutopatchError('FAILED_TAMPERED', 'rescue branch belongs to a different run');
+      failed.tempBranch = inputs.rescueBranch;
+      failed.tempBranchRemote = true;
+    }
     if (deps.issues && !inputs.dryRun) {
       const [owner, repo] = inputs.repository.split('/') as [string, string];
       const url = await upsertFailureIssue(deps.issues, owner, repo, inputs.branch ?? failed.plan?.branch ?? 'default branch',
         renderSummary(failed, { forIssue: true, runUrl: env.runUrl }), log);
       failed.notes.push(`issue: ${url}`);
     }
+    failed.reportedFailureState = failed.state;
+    failed.reason = `Reported ${failed.state}: ${failed.reason}`;
+    failed.state = 'REPORTED';
     await writeResults(resultsDir, failed, null);
     return failed;
   }
@@ -49,8 +58,10 @@ export async function runPhase(inputs: Inputs, env: RunEnv, deps: RunDeps): Prom
     publish: null, tempBranch: null, headSha: null, leftoverBranches: [], costUsd: 0, agentCalls: 0, notes: [], error: null };
   try {
     if (!inputs.artifactDir || !inputs.candidateDigest) throw new AutopatchError('FAILED_PLAN', 'artifact_dir and candidate_digest from the prepare job are required');
-    const { git, candidate, plan } = await importCandidate(inputs.artifactDir, inputs.candidateDigest, path.join(base, 'repo'), phase === 'publish');
-    checkContext(candidate, inputs, env);
+    const { git, candidate, plan } = await importCandidate(inputs.artifactDir, inputs.candidateDigest, path.join(base, 'repo'), {
+      source: inputs.forkRemoteUrl ?? `${env.serverUrl}/${inputs.repository}.git`, token: inputs.token, bare: phase === 'publish',
+      checkContext: candidate => checkContext(candidate, inputs, env),
+    });
     report.plan = candidate.kind === 'fast_forward' ? { kind: 'fast_forward', branch: candidate.branch, branchSha: candidate.originalSha,
       upstreamBranch: candidate.upstreamBranch, upstreamRef: plan.upstreamRef, upstreamSha: candidate.upstreamSha } : plan;
     report.headSha = candidate.headSha;
@@ -75,36 +86,46 @@ export async function runPhase(inputs: Inputs, env: RunEnv, deps: RunDeps): Prom
       report.state = 'VERIFIED';
       report.reason = 'the exact candidate passed verification on a fresh checkout';
     } else {
-      if (!inputs.verificationDir || !inputs.verificationDigest) throw new AutopatchError('FAILED_PLAN', 'verification_dir and verification_digest from the verification job are required');
-      const verification = verificationSchema.parse(await readBoundJson(path.join(inputs.verificationDir, 'verification.json'), inputs.verificationDigest));
-      if (verification.candidateDigest !== inputs.candidateDigest || verification.runId !== env.runId || verification.runAttempt !== env.runAttempt ||
-        verification.headSha !== candidate.headSha || verification.treeSha !== candidate.treeSha || verification.verifyCommand !== (inputs.verifyCommand ?? null)) {
-        throw new AutopatchError('FAILED_TAMPERED', 'verification belongs to a different candidate, run, or command');
+      if (candidate.approval === 'approved') {
+        if (!inputs.verificationDir || !inputs.verificationDigest) throw new AutopatchError('FAILED_PLAN', 'verification_dir and verification_digest from the verification job are required');
+        const verification = verificationSchema.parse(await readBoundJson(path.join(inputs.verificationDir, 'verification.json'), inputs.verificationDigest));
+        if (verification.candidateDigest !== inputs.candidateDigest || verification.runId !== env.runId ||
+          verification.headSha !== candidate.headSha || verification.treeSha !== candidate.treeSha || verification.verifyCommand !== (inputs.verifyCommand ?? null)) {
+          throw new AutopatchError('FAILED_TAMPERED', 'verification belongs to a different candidate, run, or command');
+        }
       }
       await git.ensureRemote('origin', inputs.forkRemoteUrl ?? `${env.serverUrl}/${inputs.repository}.git`);
       const remote = await git.authenticated(inputs.token);
       const branch = inputs.branch ?? await remote.remoteDefaultBranch('origin');
       if (branch !== candidate.branch) throw new AutopatchError('FAILED_PLAN', 'candidate branch differs from the maintained branch');
-      const checkpointSha = await fetchCheckpoint(remote, branch);
-      if ((checkpointSha ?? null) !== candidate.checkpointSha) throw new AutopatchError('FAILED_PUBLISH', 'upstream checkpoint changed since planning');
-      const ctx = { git: remote, branch, leaseSha: candidate.originalSha, upstreamSha: candidate.upstreamSha,
-        checkpointSha: checkpointSha ?? null, runId: env.runId, runAttempt: env.runAttempt, token: inputs.token, dryRun: inputs.dryRun, log };
-      report.tempBranch = tempBranchName(env.runId, env.runAttempt);
-      await pushTempBranch(ctx, candidate.headSha, report.tempBranch);
-      report.tempBranchRemote = !inputs.dryRun;
-      report.leftoverBranches = await listLeftoverBranches(remote, report.tempBranch).catch(() => []);
-      if (inputs.publish === 'stage' || !candidate.autoEligible) {
-        report.state = 'STAGED';
-        report.reason = `${inputs.dryRun ? 'dry run: would stage' : 'staged'} verified candidate on ${report.tempBranch}; default branch was not updated`;
-      } else {
-        report.publish = await publishBranch(ctx, candidate.headSha, report.tempBranch, inputs.keepBackups);
-        report.notes.push(...(report.publish.warnings ?? []));
+      const prior = candidate.approval === 'approved' && candidate.autoEligible && inputs.publish === 'auto'
+        ? await findPublishedCandidate(remote, branch, env.runId, candidate.originalSha, candidate.headSha, candidate.upstreamSha) : undefined;
+      if (prior) {
+        report.publish = { backupRef: prior, pushed: true, prunedBackups: [] };
         report.state = candidate.kind === 'fast_forward' ? 'FAST_FORWARDED' : 'APPROVED';
-        report.reason = inputs.dryRun ? 'dry run: verified candidate was not pushed' : `published verified candidate ${candidate.headSha}`;
-        if (deps.issues && !inputs.dryRun) {
-          const [owner, repo] = inputs.repository.split('/') as [string, string];
-          await closeFailureIssue(deps.issues, owner, repo, branch, report.reason, log).catch(e => report.notes.push(`issue cleanup failed: ${String(e)}`));
+        report.reason = 'this exact candidate was already published by an earlier attempt';
+      } else {
+        const checkpointSha = await fetchCheckpoint(remote, branch);
+        if ((checkpointSha ?? null) !== candidate.checkpointSha) throw new AutopatchError('FAILED_PUBLISH', 'upstream checkpoint changed since planning');
+        const ctx = { git: remote, branch, leaseSha: candidate.originalSha, upstreamSha: candidate.upstreamSha,
+          checkpointSha: checkpointSha ?? null, runId: env.runId, runAttempt: env.runAttempt, token: inputs.token, dryRun: inputs.dryRun, log };
+        report.tempBranch = tempBranchName(env.runId, env.runAttempt);
+        await pushTempBranch(ctx, candidate.headSha, report.tempBranch);
+        report.tempBranchRemote = !inputs.dryRun;
+        report.leftoverBranches = await listLeftoverBranches(remote, report.tempBranch).catch(() => []);
+        if (inputs.publish === 'stage' || !candidate.autoEligible || candidate.approval === 'contested') {
+          report.state = 'STAGED';
+          report.reason = `${inputs.dryRun ? 'dry run: would stage' : 'staged'} ${candidate.approval === 'contested' ? 'contested rescue' : 'verified'} candidate on ${report.tempBranch}; default branch was not updated`;
+        } else {
+          report.publish = await publishBranch(ctx, candidate.headSha, report.tempBranch, inputs.keepBackups);
+          report.notes.push(...(report.publish.warnings ?? []));
+          report.state = candidate.kind === 'fast_forward' ? 'FAST_FORWARDED' : 'APPROVED';
+          report.reason = inputs.dryRun ? 'dry run: verified candidate was not pushed' : `published verified candidate ${candidate.headSha}`;
         }
+      }
+      if (report.publish?.pushed && deps.issues && !inputs.dryRun) {
+        const [owner, repo] = inputs.repository.split('/') as [string, string];
+        await closeFailureIssue(deps.issues, owner, repo, branch, report.reason, log).catch(e => report.notes.push(`issue cleanup failed: ${String(e)}`));
       }
     }
   } catch (e) {

@@ -36,9 +36,15 @@ on:
       require_hard_limits:
         type: boolean
         default: false
+      claude_version:
+        type: string
+        default: '2.1.288'
+      codex_version:
+        type: string
+        default: '0.160.0'
       publish:
         type: string
-        default: stage
+        default: auto
       dry_run:
         type: boolean
         default: false
@@ -100,11 +106,13 @@ jobs:
           max_rounds: ${{ inputs.max_rounds }}
           max_cost_usd: ${{ inputs.max_cost_usd }}
           require_hard_limits: ${{ inputs.require_hard_limits }}
+          claude_version: ${{ inputs.claude_version }}
+          codex_version: ${{ inputs.codex_version }}
           dry_run: ${{ inputs.dry_run }}
           anthropic_api_key: ${{ secrets.anthropic_api_key }}
           openai_api_key: ${{ secrets.openai_api_key }}
       - id: candidate
-        if: steps.prepare.outputs.state == 'PREPARED'
+        if: always() && steps.prepare.outputs.artifact_digest != ''
         uses: actions/upload-artifact@v6
         with:
           name: autopatch-candidate-${{ github.run_id }}-${{ github.run_attempt }}
@@ -115,7 +123,9 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: autopatch-prepare-results-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ steps.prepare.outputs.results_dir || format('{0}/autopatch/results', runner.temp) }}
+          path: |
+            ${{ steps.prepare.outputs.results_dir || format('{0}/autopatch/results', runner.temp) }}
+            !${{ steps.prepare.outputs.results_dir || format('{0}/autopatch/results', runner.temp) }}/candidate/**
           if-no-files-found: ignore
 
   verify:
@@ -163,8 +173,11 @@ jobs:
 
   publish:
     needs: [prepare, verify]
+    if: always() && needs.prepare.outputs.artifact_id != '' && (needs.verify.result == 'success' || needs.prepare.outputs.state == 'FAILED_CONTESTED')
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      temp_branch: ${{ steps.publish.outputs.temp_branch }}
     steps:
       - uses: actions/download-artifact@v6
         with:
@@ -172,6 +185,7 @@ jobs:
           path: ${{ runner.temp }}/candidate-input
           merge-multiple: true
       - uses: actions/download-artifact@v6
+        if: needs.verify.result == 'success'
         with:
           artifact-ids: ${{ needs.verify.outputs.artifact_id }}
           path: ${{ runner.temp }}/verification-input
@@ -200,7 +214,7 @@ jobs:
           if-no-files-found: ignore
 
   report:
-    needs: [prepare, verify]
+    needs: [prepare, verify, publish]
     if: always() && !inputs.dry_run && ((needs.prepare.result == 'failure' && needs.prepare.outputs.results_digest != '') || (needs.verify.result == 'failure' && needs.verify.outputs.results_digest != ''))
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -219,3 +233,4 @@ jobs:
           token: ${{ secrets.token }}
           artifact_dir: ${{ runner.temp }}/failure-input
           results_digest: ${{ needs.verify.outputs.results_digest || needs.prepare.outputs.results_digest }}
+          rescue_branch: ${{ needs.publish.outputs.temp_branch }}

@@ -5,6 +5,30 @@ rebase; agents resolve conflicts and review intent. Commit messages and authorsh
 review fixes are folded into a surviving patch. A conflicted fixup may fall back to the final patch;
 that change in ownership is recorded for the next review.
 
+## Why GitHub runners rather than hosted sandboxes
+
+GitHub-hosted runners already provide disposable VMs, Git, build tools, artifact transport, scheduling,
+and a job deadline. A weekly fork sync therefore needs no additional cloud account, persistent service,
+SDK, or secret-distribution system. Provider-neutral CLI processes also permit cross-vendor review;
+provider-specific managed agents would constrain that choice. Hosted sandboxes become attractive for
+long-lived state, workloads beyond the runner deadline, or organizational requirements for another
+execution environment. They are not required to isolate publishing: separate Actions jobs plus an OS
+sandbox provide that boundary here. Runner availability is convenience, not proof that same-user
+subprocesses are isolated; that is why the original single-job design was replaced.
+
+## Rebase mechanics and accounting
+
+During a rebase the sides are swapped: **ours / HEAD** is new upstream plus patches already replayed;
+**theirs** is the fork patch currently being applied. Every resolution prompt states this. `zdiff3`
+markers add the old common base. The index, including stages 1/2/3, detects content, add/add,
+modify/delete and binary conflicts; marker scanning is only an additional check.
+
+Patch accounting is `count(upstream..candidate) = n - absorbed - became_empty - skipped`. These are
+disjoint outcomes for original patches: `git cherry` identifies absorbed patch IDs, `--empty=stop`
+records patches that become empty, and worker-requested skips require an explicit reviewer decision.
+Never use `-X ours` or `-X theirs`, which can silently discard one side. Rerere is disabled until a
+tested pre-resolution policy exists; Git cannot silently pre-fill conflicts from a runner's cache.
+
 ## Trust boundaries
 
 The reusable workflow separates credentials and execution:
@@ -35,23 +59,31 @@ Every candidate identifies:
 - candidate commit SHA and tree SHA;
 - ordered original patches and their current SHAs or drop outcomes;
 - verification command identity and automatic-publication eligibility;
-- SHA-256 of a Git bundle containing only four explicit candidate refs.
+- SHA-256 of an incremental bundle with allowlisted upstream/head refs, or null when no new objects exist;
+- explicit approved/contested status, which independently forbids auto-promotion of contested results.
 
 The prepare job emits a SHA-256 manifest digest as a job output. Verify consumes the artifact by its
 immutable Actions artifact ID, checks its digest and bundle contents, imports into a new repository,
 checks accounting/ancestry, and runs the trusted command. Its manifest binds the result to the same
 candidate and run; its digest is another job output. Publish requires both trusted outputs, imports
-only the allowlisted refs into a fresh bare repository, and repeats object-level checks.
+only the allowlisted refs into a fresh bare repository, and repeats object-level checks. Bundles exclude
+objects reachable from the original fork tip; each importer first fetches that exact basis from the
+trusted configured fork URL, requesting blob filtering. Basis URLs never come from artifacts.
 
 Artifact contents cannot choose a different destination repository, maintained branch, run, or shell
 command. Recomputing a digest on arbitrary input is not authentication; the workflow's producing-job
-outputs and artifact IDs establish provenance. Rerun all dependent jobs together after a new run attempt.
+outputs and artifact IDs establish provenance. Run ID remains binding, while attempt is audit metadata:
+failed verify/publish jobs can reuse successful earlier attempts without repeating model work. Publishing
+reconciles an earlier successful transaction by matching the candidate, checkpoint, and same-run backup.
 
 ## Mutation contracts
 
 Before and after external calls, guard logical index entries, refs, HEAD/rebase pseudorefs, sequencer
 contents, and repository configuration. Editing workers may change files, but cannot stage or alter
 history. Read-only calls may change neither source nor Git state. Guards run even when calls throw.
+Worktree/common-directory paths are resolved once; filesystem metadata/ref snapshots plus a single
+logical-index query replace repeated Git path-discovery processes. Read-only calls additionally compare
+status and the contents of dirty paths. Packed refs, stash logs and .git indirection remain covered.
 
 Conflict resolution stages only literal, validated reported files. NUL-delimited Git output preserves
 Unicode, whitespace, newline and quoted filenames. Traversal, metadata paths, directory reports and
@@ -73,8 +105,10 @@ an explicit original-patch comparison rather than ignoring a failed range-diff i
 4. Approval requires no blocker/major findings and explicit approval of every worker skip.
 5. Patch references must be nonempty, unique hexadecimal prefixes of at least seven characters.
    Duplicate or ambiguous skip decisions are invalid. An unexplained rejection remains a rejection.
-6. Worker edits or rebuts. Unreported edits fail; edits are folded into one explicitly named patch or,
-   when no target is supplied, selected by file history. Invalid/multiple explicit targets fail.
+6. Worker edits or rebuts. Invalid skip references become blocking reviewer feedback. Invalid fixup
+   targets, multiple explicit targets, or unreported files receive a bounded worker correction attempt
+   with the edits preserved. Persistently invalid reports remain unapproved and recoverable. Valid edits
+   fold into one named patch or, when no target is supplied, a patch selected by file history.
 7. Stop at the round limit or when normalized issues persist without candidate changes.
 
 Provider diversity improves review independence; it does not prove semantic correctness. Meaningful
@@ -84,20 +118,26 @@ project verification remains necessary. The `fake` backend is exclusively a test
 
 | Condition | Prepare | Verify | Publish |
 |---|---|---|---|
-| Upstream unchanged | NOTHING_TO_DO, current SHA | skipped | skipped |
+| Upstream unchanged | NOTHING_TO_DO, unless initialization was explicitly requested | skipped, or normal initialization verification | skipped, or atomic checkpoint initialization |
 | Linear rebase or patchless fast-forward | PREPARED after gates/consensus | VERIFIED for exact candidate | STAGED or APPROVED/FAST_FORWARDED |
 | Missing independent review, verification, or initialization | Candidate may be prepared | Structural gates still apply | STAGED |
 | `publish=stage` | Same preparation | Same verification | Temporary ref only |
 | `dry_run=true` | Same preparation | Same verification | No remote ref or issue changes |
 | Gate, agent, tampering, or consensus failure | FAILED_* + available recovery artifacts | skipped or FAILED_* | skipped |
+| Complete, gate-passing but contested candidate | FAILED_CONTESTED + candidate artifact | skipped | rescue branch only, regardless of publish=auto |
 | Candidate/verification provenance mismatch | — | FAILED_TAMPERED | FAILED_TAMPERED |
 | Concurrent maintained-branch/checkpoint update | — | — | FAILED_PUBLISH, lease protects refs |
 | Cleanup error after successful transaction | — | — | Successful state with warnings |
 
-Automatic publication requires independent review, verification, and an initialized upstream anchor.
+Automatic publication of a patch series requires independent review, verification, and an initialized upstream anchor.
+`publish` defaults to `auto`; staging is an explicit choice or the fallback when eligibility is missing.
 The first publication requires an explicit inspected `initial_base`; subsequent runs use
 `refs/autopatch/upstream/<branch>`. The anchor must be an ancestor of both fork and upstream. A rewritten
 upstream fails planning instead of reclassifying deleted upstream commits as personal patches.
+An explicit first initialization may run even if upstream has not moved; like a patchless
+fast-forward it involves no agent judgement, so only gates and verification run. A genuinely patchless
+fast-forward requires no agent installation or calls; it uses deterministic gates and verification,
+still respecting staging, initialization, leases and backups.
 
 Publish pushes the verified temporary branch, then uses one atomic transaction with explicit leases
 to create the immutable backup, update the maintained branch, and advance the upstream checkpoint.
@@ -109,11 +149,17 @@ filters and credential policies are part of the consuming repository's configura
 
 ## Recovery and interruption
 
-Preparation does not push incomplete or contested results. It writes portable checkpoints containing
-the original/upstream/partial history bundle, index stages, worktree files, sequencer state, current
-patch and pending patches. Checkpoints are promoted only after the next snapshot is complete, retaining
-the previous snapshot during replacement. Rebase stops, completed resolutions, and review progress
-update artifacts. Failures retain the last safe checkpoint; tampering does not overwrite it.
+Preparation never pushes. Gate-passing contested candidates export a stage-only manifest; the credentialed
+publisher retains them on a rescue branch and the reporting job links it. Issue reporting returns
+REPORTED, preserving the source failure state without generating another failed job.
+
+Portable checkpoints contain only dirty/conflicted paths, changed index stages, sequencer state, current
+patch and pending patches. Their bundle excludes original-tip history and includes a separate carrier
+commit for otherwise unreachable staged blobs. Restoring fetches the original tip from an explicitly
+selected repository, checks out the partial HEAD, and overlays these deltas. Checkpoints are promoted
+only after the next snapshot is complete. Identical snapshots are reused; clean initial/final rebases and
+no-edit review rounds do not repack history. Stops, resolutions, actual review fixes and failures save
+checkpoints. Tampering retains the last safe checkpoint.
 
 The recovery tool reconstructs a new local worktree/index without running hooks or continuing the
 rebase. Partial-rebase reports do not offer a direct force-push recipe. Completed contested candidates
@@ -122,10 +168,23 @@ after the last completed checkpoint or prevent artifact upload.
 
 ## Backend contracts and testing
 
-CLIs are pinned and checked at startup. Nonzero exits are failures even when JSON looks valid.
+CLI versions default to the tested pins and can be selected using claude_version/codex_version inputs,
+including preinstalled binaries with install_clis=false. Nonzero exits are failures even when JSON looks valid.
 Claude provides reported dollar/turn controls; Codex does not, so its spend is explicitly unpriced.
 Known-budget exhaustion blocks subsequent calls. `require_hard_limits` rejects unsupported backends;
 process-group wall-clock timeouts apply to all invocations.
+
+Claude uses `--bare -p`, `--output-format json`, `--json-schema`, `--system-prompt`, `dontAsk`,
+`--no-session-persistence`, and `--strict-mcp-config`. Editing tools are Read/Edit/Write/Grep/Glob plus
+an allowlist of Git subcommands; reviewers use `--restricted` with Read/Grep/Glob. Codex uses
+`exec --json --output-schema --output-last-message --ephemeral --ignore-user-config --ignore-rules`,
+`project_doc_max_bytes=0`, `approval_policy=never`, and workspace-write/read-only tool sandboxes with
+workspace network disabled. Its system instructions are prepended because the tested CLI has no
+supported system-prompt flag. Both CLIs run inside the outer OS sandbox.
+
+The sandbox masks `/run` but restores `/run/systemd/resolve` read-only so Ubuntu resolver symlinks work.
+Hosted-runner CI checks both the actual bubblewrap/AppArmor interaction and DNS to the provider hosts.
+Network and bundle Git commands use the job deadline rather than a blanket five-minute timeout.
 
 Tests exercise real Git repositories, semantic verdict validation, mutation attempts at phase
 boundaries, interrupted recovery, artifact mismatches, publication faults, and staging/dry-run policy.

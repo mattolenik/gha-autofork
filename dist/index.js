@@ -44240,6 +44240,7 @@ var boolString = external_exports.string().trim().toLowerCase().pipe(external_ex
 var intString = (min) => external_exports.string().trim().regex(/^\d+$/, "must be a non-negative integer").transform(Number).pipe(external_exports.number().int().min(min));
 var numString = (min) => external_exports.string().trim().regex(/^\d+(\.\d+)?$/, "must be a number").transform(Number).pipe(external_exports.number().min(min));
 var optionalString = external_exports.string().trim().transform((s) => s === "" ? void 0 : s);
+var cliVersion = optionalString.pipe(external_exports.string().regex(/^\d+\.\d+\.\d+$/, "must be an exact CLI version").optional()).optional();
 var inputsSchema = external_exports.object({
   upstream: external_exports.string().trim().min(1, "upstream is required"),
   upstreamBranch: optionalString,
@@ -44271,7 +44272,10 @@ var inputsSchema = external_exports.object({
   initialBase: optionalString.optional(),
   sandbox: boolString.optional(),
   requireHardLimits: boolString.optional(),
-  resultsDigest: optionalString.optional()
+  resultsDigest: optionalString.optional(),
+  claudeVersion: cliVersion,
+  codexVersion: cliVersion,
+  rescueBranch: optionalString.optional()
 });
 var INPUT_NAMES = {
   upstream: "upstream",
@@ -44304,7 +44308,10 @@ var INPUT_NAMES = {
   initialBase: "initial_base",
   sandbox: "sandbox",
   requireHardLimits: "require_hard_limits",
-  resultsDigest: "results_digest"
+  resultsDigest: "results_digest",
+  claudeVersion: "claude_version",
+  codexVersion: "codex_version",
+  rescueBranch: "rescue_branch"
 };
 function readRawInputs() {
   const out = {};
@@ -44440,9 +44447,9 @@ function renderSummary(r, opts = { forIssue: false }) {
       "",
       "Download the results artifact and restore its recovery checkpoint with the trusted recovery tool:",
       "",
-      fence("npx tsx scripts/recover.ts /path/to/results/recovery /path/to/new-rescue-directory", "sh"),
+      fence("npx tsx scripts/recover.ts /path/to/results/recovery /path/to/new-rescue-directory <fork-url-or-existing-clone>", "sh"),
       "",
-      "The checkpoint includes the original history, completed resolutions, index, and pending rebase commands. Inspect git status and continue the rebase. A partial branch must not be promoted to the default branch."
+      "The checkpoint contains incremental history, dirty files, staged resolutions, and pending rebase commands. The supplied repository must still contain the original fork tip. Inspect git status and continue the rebase. A partial branch must not be promoted to the default branch."
     );
   }
   if (opts.forIssue && r.plan && r.tempBranch && r.outcome && r.tempBranchRemote) {
@@ -44453,9 +44460,9 @@ function renderSummary(r, opts = { forIssue: false }) {
     lines.push(
       fence(
         [
-          `git fetch origin ${quote(r.tempBranch)} ${quote(branch)}`,
+          `git fetch origin ${quote(r.tempBranch)} ${quote(branch)} ${quote(r.plan.branchSha)}`,
           `git checkout -b autopatch-rescue ${quote(`origin/${r.tempBranch}`)}`,
-          `git range-diff ${r.plan.kind === "rebase" ? `${short(r.plan.base)}..origin/${branch} ${short(r.plan.upstreamSha)}..HEAD` : ""}`,
+          `git range-diff ${r.plan.kind === "rebase" ? `${quote(`${r.plan.base}..${r.plan.branchSha}`)} ${quote(`${r.plan.upstreamSha}..HEAD`)}` : ""}`,
           "# fix things, then:",
           `git push ${quote(`--force-with-lease=${branch}:${r.plan.branchSha}`)} origin ${quote(`HEAD:${branch}`)}`,
           `git push origin --delete ${quote(r.tempBranch)}`
@@ -44469,7 +44476,7 @@ function renderSummary(r, opts = { forIssue: false }) {
 }
 
 // src/run.ts
-var fs17 = __toESM(require("node:fs/promises"), 1);
+var fs18 = __toESM(require("node:fs/promises"), 1);
 var path14 = __toESM(require("node:path"), 1);
 
 // src/agents/claude.ts
@@ -44805,6 +44812,9 @@ var BOT_IDENTITY = {
   name: "autopatch[bot]",
   email: "autopatch@users.noreply.github.com"
 };
+function defaultGitTimeout(args) {
+  return ["clone", "fetch", "push", "bundle", "repack", "gc"].includes(args[0] ?? "") ? 0 : 5 * 6e4;
+}
 function baseEnvFromProcess() {
   const keep = ["PATH", "HOME", "TMPDIR", "TMP", "TEMP", "LANG", "SSH_AUTH_SOCK", "XDG_CONFIG_HOME"];
   const out = {};
@@ -44818,6 +44828,7 @@ var Git = class _Git {
   cwd;
   config;
   env;
+  layoutPromise;
   constructor(cwd, options = {}) {
     this.cwd = cwd;
     this.config = {
@@ -44844,7 +44855,9 @@ var Git = class _Git {
     return new _Git(cwd, { config: this.config, env: this.env });
   }
   withConfig(config2) {
-    return new _Git(this.cwd, { config: { ...this.config, ...config2 }, env: this.env });
+    const git = new _Git(this.cwd, { config: { ...this.config, ...config2 }, env: this.env });
+    git.layoutPromise = this.layoutPromise;
+    return git;
   }
   async run(args, options = {}) {
     const configArgs = [];
@@ -44860,7 +44873,7 @@ var Git = class _Git {
           env: { ...this.env, ...options.env },
           maxBuffer: 256 * 1024 * 1024,
           encoding: "utf8",
-          timeout: options.timeoutMs ?? 5 * 6e4,
+          timeout: options.timeoutMs ?? defaultGitTimeout(args),
           killSignal: "SIGKILL"
         },
         (err, stdout, stderr) => {
@@ -44891,7 +44904,15 @@ var Git = class _Git {
     return this.out(["rev-parse", "--verify", `${ref}^{tree}`]);
   }
   async commonDir() {
-    return path3.resolve(this.cwd, await this.out(["rev-parse", "--git-common-dir"]));
+    return (await this.layout()).commonDir;
+  }
+  /** Worktree layout is stable; guards separately fingerprint its .git indirection. */
+  layout() {
+    this.layoutPromise ??= this.lines(["rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir"]).then(([gitDir, commonDir]) => {
+      if (!gitDir || !commonDir) throw new Error("could not resolve Git worktree layout");
+      return { gitDir, commonDir };
+    });
+    return this.layoutPromise;
   }
   async requireSupportedVersion() {
     const version2 = await this.out(["--version"]);
@@ -44912,9 +44933,13 @@ var Git = class _Git {
     return r.code === 0 ? r.stdout.trim() : void 0;
   }
   async gitDir() {
-    return path3.resolve(this.cwd, await this.out(["rev-parse", "--git-dir"]));
+    return (await this.layout()).gitDir;
   }
   async gitPath(name) {
+    if (["HEAD", "REBASE_HEAD", "ORIG_HEAD", "MERGE_HEAD", "CHERRY_PICK_HEAD", "index", "rebase-merge", "rebase-apply", "sequencer", "config.worktree"].includes(name)) {
+      return path3.join((await this.layout()).gitDir, name);
+    }
+    if (name === "config") return path3.join((await this.layout()).commonDir, name);
     return path3.resolve(this.cwd, await this.out(["rev-parse", "--git-path", name]));
   }
   async isShallow() {
@@ -45035,6 +45060,10 @@ async function sandboxCommand(bin, args, cwd, mode, env, writable = []) {
     "/tmp",
     "--tmpfs",
     "/run",
+    // Ubuntu's /etc/resolv.conf commonly points into this otherwise-hidden directory.
+    "--ro-bind-try",
+    "/run/systemd/resolve",
+    "/run/systemd/resolve",
     "--tmpfs",
     "/home",
     "--tmpfs",
@@ -45509,9 +45538,9 @@ ${content}=======
 function createBackend(name, inputs, log) {
   switch (name) {
     case "claude":
-      return new ClaudeBackend({ log, sandbox: inputs.sandbox ?? false });
+      return new ClaudeBackend({ log, sandbox: inputs.sandbox ?? false, installVersion: inputs.claudeVersion ?? CLAUDE_VERSION });
     case "codex":
-      return new CodexBackend({ log, sandbox: inputs.sandbox ?? false });
+      return new CodexBackend({ log, sandbox: inputs.sandbox ?? false, installVersion: inputs.codexVersion ?? CODEX_VERSION });
     case "fake":
       return new FakeBackend(inputs.fakeScript);
   }
@@ -45558,9 +45587,7 @@ var Budget = class {
 };
 
 // src/candidate.ts
-var import_node_crypto2 = require("node:crypto");
-var import_node_fs = require("node:fs");
-var fs12 = __toESM(require("node:fs/promises"), 1);
+var fs13 = __toESM(require("node:fs/promises"), 1);
 var path9 = __toESM(require("node:path"), 1);
 
 // src/state.ts
@@ -45568,7 +45595,9 @@ var import_node_crypto = require("node:crypto");
 var fs11 = __toESM(require("node:fs/promises"), 1);
 var path8 = __toESM(require("node:path"), 1);
 async function candidateIdentity(git) {
-  return { headSha: await git.revParse("HEAD"), treeSha: await git.tree() };
+  const [headSha, treeSha] = await git.lines(["rev-parse", "HEAD", "HEAD^{tree}"]);
+  if (!headSha || !treeSha) throw new Error("could not resolve candidate identity");
+  return { headSha, treeSha };
 }
 async function hashPath(p) {
   const st = await fs11.lstat(p).catch(() => null);
@@ -45581,28 +45610,40 @@ async function hashPath(p) {
   return (0, import_node_crypto.createHash)("sha256").update(await fs11.readFile(p)).digest("hex");
 }
 async function gitState(git) {
-  const common = await git.commonDir();
+  const { gitDir, commonDir: common } = await git.layout();
   const metadata = ["HEAD", "REBASE_HEAD", "ORIG_HEAD", "MERGE_HEAD", "CHERRY_PICK_HEAD", "rebase-merge", "rebase-apply", "sequencer"];
   return JSON.stringify({
-    head: await git.out(["rev-parse", "HEAD"]),
-    refs: await git.out(["for-each-ref", "--format=%(refname) %(objectname)"]),
+    refs: await hashPath(path8.join(common, "refs")),
+    packedRefs: await hashPath(path8.join(common, "packed-refs")),
+    reftable: await hashPath(path8.join(common, "reftable")),
+    worktreeRefs: gitDir === common ? null : await hashPath(path8.join(gitDir, "refs")),
+    worktreeReftable: gitDir === common ? null : await hashPath(path8.join(gitDir, "reftable")),
+    stashLog: await hashPath(path8.join(common, "logs/refs/stash")),
     index: (await git.run(["ls-files", "--stage", "-v", "-z"])).stdout,
-    metadata: await Promise.all(metadata.map(async (n) => [n, await hashPath(await git.gitPath(n))])),
+    metadata: await Promise.all(metadata.map(async (n) => [n, await hashPath(path8.join(gitDir, n))])),
     config: await hashPath(path8.join(common, "config")),
-    worktreeConfig: await hashPath(await git.gitPath("config.worktree")),
+    worktreeConfig: await hashPath(path8.join(gitDir, "config.worktree")),
     gitFile: (await fs11.lstat(path8.join(git.cwd, ".git"))).isDirectory() ? null : await hashPath(path8.join(git.cwd, ".git"))
   });
 }
+async function worktreeState(git) {
+  const status = await git.statusPorcelain();
+  const files = await Promise.all(status.map(async (entry) => {
+    const rel = entry.slice(3);
+    await validateFilePath(git.cwd, rel);
+    return [entry, await hashPath(path8.join(git.cwd, rel))];
+  }));
+  return JSON.stringify(files);
+}
 async function guardGit(git, mode, label, call) {
   const before = await gitState(git);
-  const beforeDiff = mode === "readonly" ? (await git.run(["diff", "--binary", "--no-ext-diff", "--no-textconv"])).stdout : null;
-  const beforeStatus = mode === "readonly" ? await git.statusPorcelain() : null;
+  const beforeFiles = mode === "readonly" ? await worktreeState(git) : null;
   try {
     return await call();
   } finally {
     try {
       if (await gitState(git) !== before) throw new AutopatchError("FAILED_TAMPERED", `${label} changed Git metadata or the index`);
-      if (mode === "readonly" && (JSON.stringify(await git.statusPorcelain()) !== JSON.stringify(beforeStatus) || (await git.run(["diff", "--binary", "--no-ext-diff", "--no-textconv"])).stdout !== beforeDiff)) {
+      if (mode === "readonly" && await worktreeState(git) !== beforeFiles) {
         throw new AutopatchError("FAILED_TAMPERED", `${label} changed the worktree during a read-only operation`);
       }
     } catch (e) {
@@ -45633,11 +45674,65 @@ async function validateFilePath(root, rel) {
   }
 }
 
+// src/bundle.ts
+var import_node_crypto2 = require("node:crypto");
+var import_node_fs = require("node:fs");
+var fs12 = __toESM(require("node:fs/promises"), 1);
+async function fileDigest(file2) {
+  if (!(await fs12.lstat(file2)).isFile()) throw new Error(`artifact must be a regular file: ${file2}`);
+  const hash2 = (0, import_node_crypto2.createHash)("sha256");
+  for await (const chunk of (0, import_node_fs.createReadStream)(file2)) hash2.update(chunk);
+  return hash2.digest("hex");
+}
+async function updateRefs(git, refs) {
+  for (const [ref, sha2] of Object.entries(refs)) {
+    if (!/^refs\/autopatch\/[\w/-]+$/.test(ref) || !/^[0-9a-f]{40}$/.test(sha2)) throw new Error("invalid artifact ref");
+  }
+  await git.run(["update-ref", "--stdin"], { input: Object.entries(refs).map(([ref, sha2]) => `update ${ref} ${sha2}
+`).join("") });
+}
+async function writeIncrementalBundle(git, file2, basis, refs) {
+  await updateRefs(git, refs);
+  const count = Number(await git.out(["rev-list", "--count", ...Object.values(refs), `^${basis}`]));
+  if (count === 0) {
+    await fs12.rm(file2, { force: true });
+    return null;
+  }
+  await git.run(["bundle", "create", file2, ...Object.keys(refs), `^${basis}`]);
+  return fileDigest(file2);
+}
+async function fetchBasis(git, source, basis, token) {
+  if (!/^[0-9a-f]{40}$/.test(basis)) throw new Error("invalid bundle basis");
+  await git.ensureRemote("origin", source);
+  const remote = await git.authenticated(token);
+  const result = await remote.run(["fetch", "--no-tags", "--filter=blob:none", "origin", `${basis}:refs/autopatch/basis`], { allowFailure: true });
+  if (result.code !== 0) throw new AutopatchError("FAILED_PLAN", "could not fetch the original fork tip required by the incremental artifact; use a repository or backup that still contains it", [result.stderr.trim()]);
+  return remote;
+}
+async function importIncrementalBundle(git, file2, digest2, basis, refs) {
+  if (digest2 === null) {
+    for (const sha2 of Object.values(refs)) if (!await git.isAncestor(sha2, basis)) throw new AutopatchError("FAILED_TAMPERED", "missing incremental history");
+  } else {
+    if (await fileDigest(file2) !== digest2) throw new AutopatchError("FAILED_TAMPERED", "bundle digest mismatch");
+    const lines = await git.lines(["bundle", "list-heads", file2]);
+    const seen = /* @__PURE__ */ new Set();
+    for (const line of lines) {
+      const [sha2, ref] = line.split(" ");
+      if (!ref || refs[ref] !== sha2 || seen.has(ref)) throw new AutopatchError("FAILED_TAMPERED", "unexpected refs in incremental bundle");
+      seen.add(ref);
+    }
+    if (!seen.size) throw new AutopatchError("FAILED_TAMPERED", "incremental bundle has no refs");
+    await git.run(["bundle", "verify", file2]);
+    await git.run(["fetch", "--no-tags", file2, ...[...seen].map((ref) => `${ref}:${ref}`)]);
+  }
+  await updateRefs(git, refs);
+}
+
 // src/candidate.ts
 var sha = external_exports.string().regex(/^[0-9a-f]{40}$/);
 var digest = external_exports.string().regex(/^[0-9a-f]{64}$/);
 var candidateSchema = external_exports.object({
-  version: external_exports.literal(1),
+  version: external_exports.literal(2),
   runId: external_exports.string(),
   runAttempt: external_exports.string(),
   repository: external_exports.string(),
@@ -45650,11 +45745,12 @@ var candidateSchema = external_exports.object({
   checkpointSha: sha.nullable(),
   headSha: sha,
   treeSha: sha,
-  bundleDigest: digest,
+  bundleDigest: digest.nullable(),
+  approval: external_exports.enum(["approved", "contested"]),
   kind: external_exports.enum(["rebase", "fast_forward"]),
   autoEligible: external_exports.boolean(),
   verifyCommand: external_exports.string().nullable(),
-  patches: external_exports.array(external_exports.object({ original: sha, current: sha.nullable(), result: external_exports.enum(["applied", "rerere", "absorbed", "became_empty", "skipped"]) }).strict()).max(1e4)
+  patches: external_exports.array(external_exports.object({ original: sha, current: sha.nullable(), result: external_exports.enum(["applied", "absorbed", "became_empty", "skipped"]) }).strict()).max(1e4)
 }).strict();
 var verificationSchema = external_exports.object({
   version: external_exports.literal(1),
@@ -45666,28 +45762,21 @@ var verificationSchema = external_exports.object({
   verifyCommand: external_exports.string().nullable(),
   passed: external_exports.literal(true)
 }).strict();
-async function fileDigest(file2) {
-  if (!(await fs12.lstat(file2)).isFile()) throw new Error(`artifact must be a regular file: ${file2}`);
-  const hash2 = (0, import_node_crypto2.createHash)("sha256");
-  for await (const chunk of (0, import_node_fs.createReadStream)(file2)) hash2.update(chunk);
-  return hash2.digest("hex");
-}
 async function readBoundJson(file2, expected) {
   if (!/^[0-9a-f]{64}$/.test(expected)) throw new AutopatchError("FAILED_GATE", "the producing job must supply the artifact SHA-256 digest");
-  if ((await fs12.lstat(file2)).size > 5 * 1024 * 1024) throw new Error("artifact manifest is too large");
+  if ((await fs13.lstat(file2)).size > 5 * 1024 * 1024) throw new Error("artifact manifest is too large");
   if (await fileDigest(file2) !== expected) throw new AutopatchError("FAILED_TAMPERED", "artifact digest differs from the producing job output");
-  return JSON.parse(await fs12.readFile(file2, "utf8"));
+  return JSON.parse(await fs13.readFile(file2, "utf8"));
 }
 async function writeCandidate(git, directory, plan, outcome, metadata) {
   const identity = await candidateIdentity(git);
   await assertCandidate(git, { headSha: outcome.headSha, treeSha: identity.treeSha });
-  await fs12.mkdir(directory, { recursive: true });
-  const refs = { original: plan.branchSha, upstream: plan.upstreamSha, base: plan.base, head: identity.headSha };
-  for (const [name, value] of Object.entries(refs)) await git.run(["update-ref", `refs/autopatch/candidate/${name}`, value]);
+  await fs13.mkdir(directory, { recursive: true });
+  const refs = { "refs/autopatch/candidate/upstream": plan.upstreamSha, "refs/autopatch/candidate/head": identity.headSha };
   const bundle = path9.join(directory, "candidate.bundle");
-  await git.run(["bundle", "create", bundle, ...Object.keys(refs).map((n) => `refs/autopatch/candidate/${n}`)]);
+  const bundleDigest = await writeIncrementalBundle(git, bundle, plan.branchSha, refs);
   const candidate = candidateSchema.parse({
-    version: 1,
+    version: 2,
     ...metadata,
     ...identity,
     branch: plan.branch,
@@ -45695,28 +45784,25 @@ async function writeCandidate(git, directory, plan, outcome, metadata) {
     originalSha: plan.branchSha,
     upstreamSha: plan.upstreamSha,
     baseSha: plan.base,
-    bundleDigest: await fileDigest(bundle),
+    bundleDigest,
     patches: outcome.records.map((r) => ({ original: r.sha, current: r.newSha, result: r.result }))
   });
   const file2 = path9.join(directory, "candidate.json");
-  await fs12.writeFile(file2, JSON.stringify(candidate, null, 2));
+  await fs13.writeFile(file2, JSON.stringify(candidate, null, 2));
   return fileDigest(file2);
 }
-async function importCandidate(directory, expectedDigest, destination, bare = false) {
+async function importCandidate(directory, expectedDigest, destination, options) {
   const candidate = candidateSchema.parse(await readBoundJson(path9.join(directory, "candidate.json"), expectedDigest));
+  options.checkContext?.(candidate);
   const bundle = path9.resolve(directory, "candidate.bundle");
-  if (await fileDigest(bundle) !== candidate.bundleDigest) throw new AutopatchError("FAILED_TAMPERED", "candidate bundle digest mismatch");
-  await fs12.mkdir(destination, { recursive: true });
-  if ((await fs12.readdir(destination)).length) throw new Error("candidate import requires an empty directory");
-  const git = new Git(destination);
-  await git.run(["init", "-q", ...bare ? ["--bare"] : []]);
+  await fs13.mkdir(destination, { recursive: true });
+  if ((await fs13.readdir(destination)).length) throw new Error("candidate import requires an empty directory");
+  let git = new Git(destination);
+  await git.run(["init", "-q", ...options.bare ? ["--bare"] : []]);
   for (const branch of [candidate.branch, candidate.upstreamBranch]) await git.run(["check-ref-format", "--branch", branch]);
-  const refs = { original: candidate.originalSha, upstream: candidate.upstreamSha, base: candidate.baseSha, head: candidate.headSha };
-  const expectedHeads = Object.entries(refs).map(([name, value]) => `${value} refs/autopatch/candidate/${name}`).sort();
-  const heads = (await git.lines(["bundle", "list-heads", bundle])).sort();
-  if (JSON.stringify(heads) !== JSON.stringify(expectedHeads)) throw new AutopatchError("FAILED_TAMPERED", "unexpected refs in candidate bundle");
-  await git.run(["bundle", "verify", bundle]);
-  await git.run(["fetch", "--no-tags", bundle, ...Object.keys(refs).map((n) => `refs/autopatch/candidate/${n}:refs/autopatch/candidate/${n}`)]);
+  git = await fetchBasis(git, options.source, candidate.originalSha, options.token);
+  const refs = { "refs/autopatch/candidate/upstream": candidate.upstreamSha, "refs/autopatch/candidate/head": candidate.headSha };
+  await importIncrementalBundle(git, bundle, candidate.bundleDigest, candidate.originalSha, refs);
   if (await git.tree(candidate.headSha) !== candidate.treeSha || !await git.isAncestor(candidate.upstreamSha, candidate.headSha)) {
     throw new AutopatchError("FAILED_GATE", "candidate tree or upstream ancestry is invalid");
   }
@@ -45724,7 +45810,7 @@ async function importCandidate(directory, expectedDigest, destination, bare = fa
   if (bases.length !== 1 || bases[0] !== candidate.baseSha) throw new AutopatchError("FAILED_GATE", "candidate has an invalid original merge base");
   if (candidate.checkpointSha && !await git.isAncestor(candidate.checkpointSha, candidate.upstreamSha)) throw new AutopatchError("FAILED_PLAN", "upstream rewrote its checkpoint");
   const originals = await git.lines(["rev-list", "--reverse", `${candidate.baseSha}..${candidate.originalSha}`]);
-  const survivors = candidate.patches.filter((p) => p.result === "applied" || p.result === "rerere");
+  const survivors = candidate.patches.filter((p) => p.result === "applied");
   const actual = await git.lines(["rev-list", "--reverse", `${candidate.upstreamSha}..${candidate.headSha}`]);
   if (JSON.stringify(originals) !== JSON.stringify(candidate.patches.map((p) => p.original)) || JSON.stringify(actual) !== JSON.stringify(survivors.map((p) => p.current)) || candidate.patches.some((p) => p.current !== null !== survivors.includes(p))) {
     throw new AutopatchError("FAILED_GATE", "candidate patch accounting or ordering is invalid");
@@ -45732,13 +45818,12 @@ async function importCandidate(directory, expectedDigest, destination, bare = fa
   for (const range of [`${candidate.baseSha}..${candidate.originalSha}`, `${candidate.upstreamSha}..${candidate.headSha}`]) {
     if ((await git.lines(["rev-list", "--merges", range])).length) throw new AutopatchError("FAILED_GATE", "candidate patch series contains merges");
   }
-  if (!bare) await git.run(["checkout", "-q", "--detach", candidate.headSha]);
-  const patches = await Promise.all(candidate.patches.map(async (p) => ({
-    sha: p.original,
-    subject: await git.out(["show", "-s", "--format=%s", p.original]),
-    author: await git.out(["show", "-s", "--format=%an", p.original]),
-    absorbed: p.result === "absorbed"
-  })));
+  if (!options.bare) await git.run(["checkout", "-q", "--detach", candidate.headSha]);
+  const descriptions = await git.lines(["log", "--reverse", "--format=%H%x1f%an%x1f%s", `${candidate.baseSha}..${candidate.originalSha}`]);
+  const patches = descriptions.map((line, i) => {
+    const [sha2 = "", author = "", ...subject] = line.split("");
+    return { sha: sha2, author, subject: subject.join(""), absorbed: candidate.patches[i].result === "absorbed" };
+  });
   const plan = {
     kind: "rebase",
     branch: candidate.branch,
@@ -46061,9 +46146,24 @@ ${gates.verify.outputTail}` : ""),
         }
         const decisions = /* @__PURE__ */ new Map();
         const skippedMapping = new Map(skipped.map((r) => [r.sha, r.sha]));
+        const invalidDecisions = /* @__PURE__ */ new Set();
         for (const decision of verdict.skips_approved) {
           const sha2 = resolvePatchRef(decision.patch, skippedMapping);
-          if (!sha2 || decisions.has(sha2)) throw new AutopatchError("FAILED_AGENT", `invalid, ambiguous, or duplicate skip approval: ${JSON.stringify(decision.patch)}`);
+          if (!sha2 || decisions.has(sha2) || invalidDecisions.has(sha2)) {
+            if (sha2) {
+              decisions.delete(sha2);
+              invalidDecisions.add(sha2);
+            }
+            entry.syntheticIssues.push({
+              id: "skip-report",
+              severity: "blocker",
+              patch: null,
+              file: null,
+              description: `Invalid, ambiguous, or duplicate skip decision ${JSON.stringify(decision.patch)}. Return one decision per skipped patch using its full original SHA.`,
+              suggested_fix: null
+            });
+            continue;
+          }
           decisions.set(sha2, decision);
         }
         for (const rec of skipped) {
@@ -46117,28 +46217,72 @@ ${gates.verify.outputTail}` : ""),
     previousIssueIds = signature;
     if (round === o.maxRounds) break;
     const ctx = await context3(entry.selfCheck);
-    const response = await guardGit(git, "edit", "review worker", () => o.worker.structured({
-      schemaName: "respond",
-      system: respondSystemPrompt(),
-      user: respondUserPrompt(ctx, issues),
-      cwd: git.cwd,
-      mode: "edit",
-      meta: { round: String(round), issueIds: ids }
-    }));
-    entry.response = response;
-    log.info(`round ${round}: worker responded (${response.verdict}) \u2014 ${response.summary}; ${response.files_changed.length} file(s) changed`);
-    const dirty = await git.statusPorcelain();
-    const changedSet = new Set(response.files_changed);
-    for (const file2 of changedSet) await validateFilePath(git.cwd, file2);
-    const unreported = dirty.map((l) => l.slice(3)).filter((p) => !changedSet.has(p));
-    if (unreported.length > 0) {
-      throw new AutopatchError("FAILED_TAMPERED", "review worker changed unreported files", unreported);
+    let response;
+    let problems = [];
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      response = await guardGit(git, "edit", "review worker", () => o.worker.structured({
+        schemaName: "respond",
+        system: respondSystemPrompt(),
+        user: respondUserPrompt(ctx, issues) + (problems.length ? `
+
+## Correct your previous attempt
+${problems.map((p) => `- ${p}`).join("\n")}
+Your edits are still in the worktree and have not been folded. Report all intended changes; remove accidental files.
+Previous report:
+${JSON.stringify(response)}` : ""),
+        cwd: git.cwd,
+        mode: "edit",
+        meta: { round: String(round), issueIds: ids, attempt: String(attempt) }
+      }));
+      problems = [];
+      const changedSet = new Set(response.files_changed);
+      for (const file2 of changedSet) {
+        try {
+          await validateFilePath(git.cwd, file2);
+        } catch (e) {
+          problems.push(e instanceof Error ? e.message : String(e));
+        }
+      }
+      const unreported = (await git.statusPorcelain()).map((l) => l.slice(3)).filter((p) => !changedSet.has(p));
+      if (unreported.length) problems.push(`unreported worktree changes: ${unreported.join(", ")}`);
+      const targets = /* @__PURE__ */ new Set();
+      for (const item of response.responses) {
+        if (item.action !== "fixed" || !item.target_patch) continue;
+        const target = resolvePatchRef(item.target_patch, outcome.mapping);
+        if (!target) problems.push(`invalid or ambiguous fixup target: ${item.target_patch}`);
+        else targets.add(target);
+      }
+      if (targets.size > 1) problems.push("fixes must name one owning patch per round; defer the other patch fixes");
+      if (!problems.length) break;
+      notes.push(`round ${round}, response attempt ${attempt}: ${problems.join("; ")}`);
+      log.warning(notes[notes.length - 1]);
     }
+    if (!response) throw new Error("unreachable: worker response missing");
+    entry.response = response;
+    if (problems.length) {
+      entry.syntheticIssues.push(...problems.map((description, i) => ({
+        id: `response-${i}`,
+        severity: "blocker",
+        patch: null,
+        file: null,
+        description,
+        suggested_fix: null
+      })));
+      gates = { ...gates, ok: false, failures: [...gates.failures, ...problems] };
+      await o.onProgress?.(history, gates);
+      return {
+        state: "GATE_FAILED",
+        rounds: history,
+        gates,
+        headSha: await git.revParse("HEAD"),
+        notes,
+        reason: "worker reporting problems remain after correction; pending edits retained for recovery"
+      };
+    }
+    log.info(`round ${round}: worker responded (${response.verdict}) \u2014 ${response.summary}; ${response.files_changed.length} file(s) changed`);
     previousChangedFiles = false;
     if (response.files_changed.length > 0) {
-      const targets = new Set(response.responses.map((r) => r.target_patch).filter((t) => !!t));
-      for (const target of targets) if (!resolvePatchRef(target, outcome.mapping)) throw new AutopatchError("FAILED_AGENT", `invalid fixup target: ${target}`);
-      if (targets.size > 1) throw new AutopatchError("FAILED_AGENT", "review fixes must target one patch per round; split multi-patch fixes across rounds");
+      const targets = new Set(response.responses.filter((r) => r.action === "fixed" && r.target_patch).map((r) => resolvePatchRef(r.target_patch, outcome.mapping)).filter((t) => !!t));
       const fold = await foldChanges({
         git,
         plan,
@@ -46165,15 +46309,15 @@ ${gates.verify.outputTail}` : ""),
 
 // src/gates.ts
 var import_node_child_process4 = require("node:child_process");
-var fs15 = __toESM(require("node:fs/promises"), 1);
+var fs16 = __toESM(require("node:fs/promises"), 1);
 var path12 = __toESM(require("node:path"), 1);
 
 // src/rebase.ts
-var fs14 = __toESM(require("node:fs/promises"), 1);
+var fs15 = __toESM(require("node:fs/promises"), 1);
 var path11 = __toESM(require("node:path"), 1);
 
 // src/quarantine.ts
-var fs13 = __toESM(require("node:fs/promises"), 1);
+var fs14 = __toESM(require("node:fs/promises"), 1);
 var path10 = __toESM(require("node:path"), 1);
 var INSTRUCTION_PATHS = [
   "AGENTS.md",
@@ -46194,7 +46338,7 @@ var INSTRUCTION_PATHS = [
 ];
 async function exists2(p) {
   try {
-    await fs13.lstat(p);
+    await fs14.lstat(p);
     return true;
   } catch {
     return false;
@@ -46202,31 +46346,31 @@ async function exists2(p) {
 }
 async function quarantine(worktree, holdDir, keep = []) {
   const keepSet = new Set(Array.from(keep));
-  const root = await fs13.realpath(worktree);
+  const root = await fs14.realpath(worktree);
   const moved = [];
-  await fs13.mkdir(holdDir, { recursive: true });
+  await fs14.mkdir(holdDir, { recursive: true });
   const move = async (rel) => {
     if (keepSet.has(rel)) return;
     const src = path10.join(worktree, rel);
     if (!await exists2(src)) return;
     if ([...keepSet].some((p) => p.startsWith(`${rel}/`))) {
-      if (!(await fs13.lstat(src)).isDirectory()) throw new AutopatchError("FAILED_TAMPERED", "instruction directory was replaced by a symlink or file");
-      for (const name of await fs13.readdir(src)) await move(`${rel}/${name}`);
+      if (!(await fs14.lstat(src)).isDirectory()) throw new AutopatchError("FAILED_TAMPERED", "instruction directory was replaced by a symlink or file");
+      for (const name of await fs14.readdir(src)) await move(`${rel}/${name}`);
       return;
     }
     await validateFilePath(worktree, `${rel}/__quarantine_probe__`).catch(async (e) => {
-      if (!(await fs13.lstat(src)).isDirectory()) await validateFilePath(worktree, rel);
+      if (!(await fs14.lstat(src)).isDirectory()) await validateFilePath(worktree, rel);
       else throw e;
     });
     const dst = path10.join(holdDir, rel);
-    await fs13.mkdir(path10.dirname(dst), { recursive: true });
-    await fs13.rename(src, dst);
+    await fs14.mkdir(path10.dirname(dst), { recursive: true });
+    await fs14.rename(src, dst);
     moved.push(rel);
   };
   try {
     for (const rel of INSTRUCTION_PATHS) await move(rel);
   } catch (e) {
-    for (const rel of moved.reverse()) await fs13.rename(path10.join(holdDir, rel), path10.join(worktree, rel));
+    for (const rel of moved.reverse()) await fs14.rename(path10.join(holdDir, rel), path10.join(worktree, rel));
     throw e;
   }
   let restored = false;
@@ -46235,7 +46379,7 @@ async function quarantine(worktree, holdDir, keep = []) {
     async restore() {
       if (restored) return;
       restored = true;
-      if (await fs13.realpath(worktree) !== root) throw new AutopatchError("FAILED_TAMPERED", "worktree root changed during quarantine");
+      if (await fs14.realpath(worktree) !== root) throw new AutopatchError("FAILED_TAMPERED", "worktree root changed during quarantine");
       const recreated = [];
       for (const rel of moved) {
         const src = path10.join(holdDir, rel);
@@ -46249,9 +46393,9 @@ async function quarantine(worktree, holdDir, keep = []) {
           }
         }
         if (await exists2(dst)) recreated.push(rel);
-        await fs13.rm(dst, { recursive: true, force: true });
-        await fs13.mkdir(path10.dirname(dst), { recursive: true });
-        await fs13.rename(src, dst);
+        await fs14.rm(dst, { recursive: true, force: true });
+        await fs14.mkdir(path10.dirname(dst), { recursive: true });
+        await fs14.rename(src, dst);
       }
       if (recreated.length) throw new AutopatchError("FAILED_TAMPERED", "agent recreated quarantined instruction files", recreated);
     }
@@ -46265,7 +46409,7 @@ var REBASE_CONFIG = {
   "rebase.autoStash": "false",
   "rebase.missingCommitsCheck": "ignore",
   "merge.conflictStyle": "zdiff3",
-  "rerere.enabled": "true",
+  "rerere.enabled": "false",
   "rerere.autoUpdate": "false",
   "core.editor": "true",
   "sequence.editor": "true"
@@ -46273,7 +46417,7 @@ var REBASE_CONFIG = {
 var MARKER_RE = /^(<{7}|={7}|>{7}|\|{7})( |$)/m;
 async function exists3(p) {
   try {
-    await fs14.lstat(p);
+    await fs15.lstat(p);
     return true;
   } catch {
     return false;
@@ -46281,8 +46425,8 @@ async function exists3(p) {
 }
 async function isBinaryFile(abs) {
   try {
-    if (!(await fs14.lstat(abs)).isFile()) return false;
-    const fh = await fs14.open(abs, "r");
+    if (!(await fs15.lstat(abs)).isFile()) return false;
+    const fh = await fs15.open(abs, "r");
     try {
       const buf = Buffer.alloc(8e3);
       const { bytesRead } = await fh.read(buf, 0, 8e3, 0);
@@ -46295,10 +46439,10 @@ async function isBinaryFile(abs) {
   }
 }
 async function hasConflictMarkers(abs) {
-  const st = await fs14.lstat(abs);
+  const st = await fs15.lstat(abs);
   if (!st.isFile()) return false;
   if (await isBinaryFile(abs)) return false;
-  const content = await fs14.readFile(abs, "utf8");
+  const content = await fs15.readFile(abs, "utf8");
   return MARKER_RE.test(content);
 }
 function classify(stages) {
@@ -46392,7 +46536,7 @@ async function runRebase(o) {
       const abs = path11.join(git.cwd, c.path);
       ctx.workingCopies.push({
         path: c.path,
-        content: c.binary || !await exists3(abs) || (await fs14.lstat(abs)).isSymbolicLink() ? null : cap(await fs14.readFile(abs, "utf8"), caps.file)
+        content: c.binary || !await exists3(abs) || (await fs15.lstat(abs)).isSymbolicLink() ? null : cap(await fs15.readFile(abs, "utf8"), caps.file)
       });
       ctx.upstreamDelta.push({
         path: c.path,
@@ -46440,7 +46584,7 @@ async function runRebase(o) {
   const headSha = await git.revParse("HEAD");
   const survivors = plan.patches.filter((p) => {
     const rec = records.get(p.sha);
-    return !rec || rec.result === "applied" || rec.result === "rerere";
+    return !rec || rec.result === "applied";
   });
   const newShas = await git.lines(["rev-list", "--reverse", `${plan.upstreamSha}..${headSha}`]);
   if (newShas.length !== survivors.length) {
@@ -46479,7 +46623,7 @@ async function applyReport(git, report, conflicts) {
     switch (f.action) {
       case "deleted":
         await git.run(["rm", "-q", "--force", "--ignore-unmatch", "--", f.path], { allowFailure: true });
-        if (await exists3(abs)) await fs14.rm(abs, { force: true });
+        if (await exists3(abs)) await fs15.rm(abs, { force: true });
         await git.run(["add", "-u", "--", f.path], { allowFailure: true });
         break;
       case "take_upstream":
@@ -46536,11 +46680,11 @@ async function applyReport(git, report, conflicts) {
 async function runGates(o) {
   const { git, plan } = o;
   const failures = [];
-  const head = await git.revParse("HEAD");
   const candidate = await candidateIdentity(git);
+  const head = candidate.headSha;
   for (const dir of ["rebase-merge", "rebase-apply"]) {
     try {
-      await fs15.access(await git.gitPath(dir));
+      await fs16.access(await git.gitPath(dir));
       failures.push("a rebase is still in progress");
       break;
     } catch {
@@ -46558,7 +46702,7 @@ async function runGates(o) {
     await validateFilePath(git.cwd, rel);
     const abs = path12.join(git.cwd, rel);
     try {
-      await fs15.access(abs);
+      await fs16.access(abs);
     } catch {
       continue;
     }
@@ -46572,7 +46716,7 @@ async function runGates(o) {
     })
   );
   if (comparison.code !== 0) failures.push(`range-diff failed: ${comparison.stderr.trim()}`);
-  const rangeDiff = count === 0 ? `No surviving patches. Original patches (all dropped):
+  const rangeDiff = plan.patches.length === 0 ? "Patchless fast-forward: no fork patches to replay or drop." : count === 0 ? `No surviving patches. Original patches (all dropped):
 ${comparison.stdout}` : comparison.stdout;
   let verify = null;
   if (o.verifyCommand && failures.length === 0) {
@@ -46790,6 +46934,20 @@ async function listBackups(git, branch) {
   const lines = await git.lines(["ls-remote", "origin", `${BACKUP_PREFIX}*/${branch}`]);
   return lines.map((l) => l.split("	")[1]).filter((ref) => ref.slice(BACKUP_PREFIX.length).split("/").slice(1).join("/") === branch).sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
 }
+async function findPublishedCandidate(git, branch, runId, original, head, upstream) {
+  const lines = await git.lines(["ls-remote", "origin", `refs/heads/${branch}`, checkpointRef(branch), `${BACKUP_PREFIX}*/${branch}`]);
+  const refs = new Map(lines.map((line) => {
+    const [sha2, ref] = line.split("	");
+    return [ref, sha2];
+  }));
+  if (refs.get(`refs/heads/${branch}`) !== head || refs.get(checkpointRef(branch)) !== upstream) return void 0;
+  return [...refs].find(([ref, sha2]) => {
+    if (sha2 !== original || !ref.startsWith(BACKUP_PREFIX)) return false;
+    const [stamp = "", ...parts] = ref.slice(BACKUP_PREFIX.length).split("/");
+    const prefix = `${runId}-`;
+    return parts.join("/") === branch && /^\d{8}-/.test(stamp) && stamp.slice(9).startsWith(prefix) && /^\d+$/.test(stamp.slice(9 + prefix.length));
+  })?.[0];
+}
 async function pruneBackups(git, branch, keep, log) {
   const refs = await listBackups(git, branch);
   const excess = refs.slice(0, Math.max(0, refs.length - keep));
@@ -46837,58 +46995,64 @@ function classifyPushError(args, err, out = "") {
 }
 
 // src/recovery.ts
-var fs16 = __toESM(require("node:fs/promises"), 1);
+var fs17 = __toESM(require("node:fs/promises"), 1);
 var path13 = __toESM(require("node:path"), 1);
 var import_node_crypto3 = require("node:crypto");
 async function saveRecovery(git, plan, destination, records, currentPatch) {
-  const next = `${destination}.next`;
-  await fs16.rm(next, { recursive: true, force: true });
-  await fs16.mkdir(path13.join(next, "files"), { recursive: true });
   const head = await git.revParse("HEAD");
-  const refs = { original: plan.branchSha, upstream: plan.upstreamSha, partial: head };
-  for (const [name, sha2] of Object.entries(refs)) await git.run(["update-ref", `refs/autopatch/recovery/${name}`, sha2]);
-  await git.run(["bundle", "create", path13.join(next, "history.bundle"), ...Object.keys(refs).map((n) => `refs/autopatch/recovery/${n}`)]);
+  const dirty = (await git.statusPorcelain()).map((entry) => entry.slice(3)).sort();
   const files = [];
-  for (const rel of new Set(await git.paths(["ls-files", "-z", "--cached", "--others", "--exclude-standard"]))) {
+  let index = "";
+  for (let offset = 0; offset < dirty.length; offset += 256) {
+    index += (await git.run(["ls-files", "--stage", "-z", "--", ...dirty.slice(offset, offset + 256)])).stdout;
+  }
+  for (const rel of dirty) {
     await validateFilePath(git.cwd, rel);
     const abs = path13.join(git.cwd, rel);
-    const st = await fs16.lstat(abs).catch(() => null);
-    if (!st) continue;
-    const file2 = { path: rel, mode: st.mode & 511, blob: null, link: null };
-    if (st.isSymbolicLink()) file2.link = await fs16.readlink(abs);
-    else if (st.isFile()) {
-      file2.blob = (0, import_node_crypto3.createHash)("sha256").update(rel).digest("hex");
-      await fs16.copyFile(abs, path13.join(next, "files", file2.blob));
-    } else continue;
-    files.push(file2);
+    const st = await fs17.lstat(abs).catch((e) => {
+      if (e.code === "ENOENT") return null;
+      throw e;
+    });
+    files.push({
+      path: rel,
+      mode: st ? st.mode & 511 : 0,
+      deleted: !st,
+      link: st?.isSymbolicLink() ? await fs17.readlink(abs) : null,
+      blob: st?.isFile() ? await fileDigest(abs) : null
+    });
   }
   const rebase = {};
   const rebaseDir = await git.gitPath("rebase-merge");
-  for (const name of await fs16.readdir(rebaseDir).catch(() => [])) {
+  for (const name of await fs17.readdir(rebaseDir).catch(() => [])) {
     const abs = path13.join(rebaseDir, name);
-    if ((await fs16.lstat(abs)).isFile()) rebase[name] = await fs16.readFile(abs, "utf8");
+    if ((await fs17.lstat(abs)).isFile()) rebase[name] = await fs17.readFile(abs, "utf8");
   }
   const todo = (rebase["git-rebase-todo"] ?? "").split("\n").map((line) => /^pick ([0-9a-f]+)/.exec(line)?.[1]).filter((s) => !!s);
   const pending = Object.keys(rebase).length ? plan.patches.filter((p) => p.sha === currentPatch || todo.some((ref) => p.sha.startsWith(ref))).map((p) => p.sha) : head === plan.branchSha ? plan.patches.map((p) => p.sha) : [];
-  const recovery = {
-    version: 1,
-    original: plan.branchSha,
-    upstream: plan.upstreamSha,
-    head,
-    currentPatch,
-    records,
-    pending,
-    index: (await git.run(["ls-files", "--stage", "-z"])).stdout,
-    rebase,
-    files
-  };
-  await fs16.writeFile(path13.join(next, "recovery.json"), JSON.stringify(recovery, null, 2));
-  await fs16.rm(`${destination}.previous`, { recursive: true, force: true });
-  await fs16.rename(destination, `${destination}.previous`).catch((e) => {
+  const content = { original: plan.branchSha, upstream: plan.upstreamSha, head, currentPatch, records, pending, index, rebase, files };
+  const signature = (0, import_node_crypto3.createHash)("sha256").update(JSON.stringify(content)).digest("hex");
+  const previous = await fs17.readFile(path13.join(destination, "recovery.json"), "utf8").catch(() => "null");
+  if (JSON.parse(previous)?.signature === signature) return;
+  const next = `${destination}.next`;
+  await fs17.rm(next, { recursive: true, force: true });
+  await fs17.mkdir(path13.join(next, "files"), { recursive: true });
+  for (const file2 of files) if (file2.blob) await fs17.copyFile(path13.join(git.cwd, file2.path), path13.join(next, "files", file2.blob));
+  const blobs = new Set(index.split("\0").filter(Boolean).map((entry) => entry.split(" ")[1]));
+  let indexCommit = head;
+  if (blobs.size) {
+    const tree = await git.out(["mktree", "-z"], { input: [...blobs].sort().map((sha2) => `100644 blob ${sha2}	${sha2}\0`).join("") });
+    indexCommit = await git.out(["commit-tree", tree, "-p", head], { input: "autopatch recovery index\n" });
+  }
+  const refs = { "refs/autopatch/recovery/upstream": plan.upstreamSha, "refs/autopatch/recovery/partial": head, "refs/autopatch/recovery/index": indexCommit };
+  const bundleDigest = await writeIncrementalBundle(git, path13.join(next, "history.bundle"), plan.branchSha, refs);
+  const recovery = { version: 2, ...content, indexCommit, bundleDigest, signature };
+  await fs17.writeFile(path13.join(next, "recovery.json"), JSON.stringify(recovery, null, 2));
+  await fs17.rm(`${destination}.previous`, { recursive: true, force: true });
+  await fs17.rename(destination, `${destination}.previous`).catch((e) => {
     if (e.code !== "ENOENT") throw e;
   });
-  await fs16.rename(next, destination);
-  await fs16.rm(`${destination}.previous`, { recursive: true, force: true });
+  await fs17.rename(next, destination);
+  await fs17.rm(`${destination}.previous`, { recursive: true, force: true });
 }
 
 // src/prompts/resolve.ts
@@ -46996,8 +47160,8 @@ async function run(inputs, env, deps) {
   const resultsDir = path14.join(base, "results");
   const holdDir = path14.join(base, "hold");
   const wtDir = path14.join(base, "wt");
-  await fs17.rm(base, { recursive: true, force: true });
-  await fs17.mkdir(resultsDir, { recursive: true });
+  await fs18.rm(base, { recursive: true, force: true });
+  await fs18.mkdir(resultsDir, { recursive: true });
   const report = {
     state: "FAILED_PLAN",
     reason: "",
@@ -47057,7 +47221,7 @@ async function run(inputs, env, deps) {
       const cloneDir = path14.join(base, "fork");
       log.info(`cloning ${inputs.repository} into ${cloneDir}`);
       const cloner = forkUrl.startsWith("https://") ? new Git(base).withConfig(authExtraHeader(inputs.token, forkUrl)) : new Git(base);
-      await fs17.mkdir(base, { recursive: true });
+      await fs18.mkdir(base, { recursive: true });
       await cloner.run(["clone", "--quiet", "--no-tags", forkUrl, cloneDir]);
       git = new Git(cloneDir);
     }
@@ -47074,9 +47238,9 @@ async function run(inputs, env, deps) {
     for (const name of [branch, upstreamBranch]) await git.run(["check-ref-format", "--branch", name]);
     await git.run(["fetch", "--no-tags", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`]);
     log.info(`fetching upstream ${inputs.upstream} (${upstreamBranch})`);
-    await upstreamGit.run(["fetch", "--no-tags", "--prune", "upstream", "+refs/heads/*:refs/remotes/upstream/*"]);
+    await upstreamGit.run(["fetch", "--no-tags", "upstream", `+refs/heads/${upstreamBranch}:refs/remotes/upstream/${upstreamBranch}`]);
     const checkpointSha = await fetchCheckpoint(git, branch);
-    const planned = await computePlan(git, {
+    let planned = await computePlan(git, {
       branch,
       upstreamBranch,
       branchRev: `refs/remotes/origin/${branch}`,
@@ -47084,6 +47248,19 @@ async function run(inputs, env, deps) {
       checkpointSha,
       initialBase: inputs.initialBase
     });
+    if (planned.kind === "nothing_to_do" && !checkpointSha && inputs.initialBase) {
+      const upstreamSha = await git.revParse(`refs/remotes/upstream/${upstreamBranch}`);
+      planned = {
+        ...planned,
+        kind: "rebase",
+        upstreamRef: `refs/remotes/upstream/${upstreamBranch}`,
+        upstreamSha,
+        base: upstreamSha,
+        expectedSurvivors: planned.patches.length,
+        upstreamCommits: 0,
+        workflowPaths: []
+      };
+    }
     report.plan = planned;
     if (planned.kind === "nothing_to_do") {
       report.headSha = planned.branchSha;
@@ -47100,13 +47277,54 @@ async function run(inputs, env, deps) {
     };
     workPlan = plan;
     const independent = !!inputs.reviewer && (inputs.reviewer.backend !== inputs.worker.backend || inputs.worker.backend === "fake");
-    const autoEligible = independent && !!inputs.verifyCommand && !!(checkpointSha || inputs.initialBase);
+    const deterministic = plan.patches.length === 0 || plan.upstreamCommits === 0;
+    const autoEligible = (independent || deterministic) && !!inputs.verifyCommand && !!(checkpointSha || inputs.initialBase);
     if (!autoEligible) report.notes.push("automatic publishing requires independent review, verify_command, and an existing upstream checkpoint or explicit initial_base; candidate will be staged");
     log.info(`${plan.patches.length} patch(es) to rebase over ${plan.upstreamCommits} new upstream commit(s); ${plan.patches.filter((p) => p.absorbed).length} already upstream`);
     if (plan.workflowPaths.length) log.info(`workflow files involved (token needs Workflows permission): ${plan.workflowPaths.join(", ")}`);
     report.tempBranch = tempBranchName(env.runId, env.runAttempt);
     wt = await new Git(git.cwd).worktreeAdd(wtDir, planned.kind === "fast_forward" ? plan.upstreamSha : plan.branchSha);
     await wt.run(["switch", "-q", "-C", report.tempBranch]);
+    const timeoutMs = inputs.agentTimeoutMinutes * 6e4;
+    const exportCandidate = async (outcome2, approval) => {
+      report.artifactDir = path14.join(resultsDir, "candidate");
+      report.artifactDigest = await writeCandidate(wt, report.artifactDir, plan, outcome2, {
+        runId: env.runId,
+        runAttempt: env.runAttempt,
+        repository: inputs.repository,
+        upstream: inputs.upstream,
+        checkpointSha: checkpointSha ?? null,
+        kind: planned.kind === "fast_forward" ? "fast_forward" : "rebase",
+        autoEligible: approval === "approved" && autoEligible,
+        verifyCommand: inputs.verifyCommand ?? null,
+        approval
+      });
+    };
+    if (deterministic) {
+      const outcome2 = plan.patches.length === 0 ? { headSha: plan.upstreamSha, records: [], conflictsResolved: 0, mapping: /* @__PURE__ */ new Map() } : {
+        headSha: plan.branchSha,
+        conflictsResolved: 0,
+        mapping: new Map(plan.patches.map((p) => [p.sha, p.sha])),
+        records: plan.patches.map((p) => ({ sha: p.sha, subject: p.subject, result: "applied", newSha: p.sha, conflicts: [], report: null, extraPaths: [] }))
+      };
+      const what = plan.patches.length === 0 ? "patchless" : "unchanged";
+      report.outcome = outcome2;
+      report.headSha = outcome2.headSha;
+      report.gates = await runGates({
+        git: wt,
+        plan,
+        expectedCount: outcome2.mapping.size,
+        verifyCommand: inputs.verifyCommand,
+        verifyTimeoutMs: timeoutMs,
+        env: buildChildEnv(),
+        log,
+        sandbox: inputs.sandbox ?? false
+      });
+      if (!report.gates.ok) return await fail("FAILED_GATE", `${what} candidate failed verification`, report.gates.failures);
+      await assertCandidate(wt, report.gates.candidate);
+      await exportCandidate(outcome2, "approved");
+      return await finish("PREPARED", `${what} candidate passed deterministic gates; no agents needed`);
+    }
     const makeBackend = deps.createBackend ?? ((name) => createBackend(name, inputs, log));
     const workerBackend = makeBackend(inputs.worker.backend);
     const installedBackends = [workerBackend];
@@ -47117,7 +47335,6 @@ async function run(inputs, env, deps) {
     };
     checkCapabilities(workerBackend);
     await workerBackend.ensureInstalled(inputs.installClis);
-    const timeoutMs = inputs.agentTimeoutMinutes * 6e4;
     const runnerOpts = { budget, maxTurns: inputs.maxTurns, timeoutMs, transcriptsDir: path14.join(resultsDir, "transcripts"), log };
     const worker = new AgentRunner({ ...runnerOpts, backend: workerBackend, model: inputs.worker.model, role: "worker", env: buildChildEnv(backendEnv(inputs.worker.backend, inputs)) });
     let reviewer = null;
@@ -47142,12 +47359,13 @@ async function run(inputs, env, deps) {
     const onProgress = async (records, active) => {
       progress = records;
       currentPatch = active;
-      report.recoveryDir = path14.join(resultsDir, "recovery");
-      await saveRecovery(wt, plan, report.recoveryDir, records, active);
-      await fs17.writeFile(path14.join(resultsDir, "progress.json"), JSON.stringify({ plan, records, currentPatch: active }, null, 2));
+      if (active !== null) {
+        report.recoveryDir = path14.join(resultsDir, "recovery");
+        await saveRecovery(wt, plan, report.recoveryDir, records, active);
+      }
+      await fs18.writeFile(path14.join(resultsDir, "progress.json"), JSON.stringify({ plan, records, currentPatch: active }, null, 2));
     };
-    await onProgress([], null);
-    const outcome = planned.kind === "fast_forward" ? { headSha: plan.upstreamSha, records: [], conflictsResolved: 0, mapping: /* @__PURE__ */ new Map() } : await log.group("rebase", () => runRebase({ git: wt, plan, worker: makeWorker(worker, plan, wtDir), holdDir, log, onProgress }));
+    const outcome = await log.group("rebase", () => runRebase({ git: wt, plan, worker: makeWorker(worker, plan, wtDir), holdDir, log, onProgress }));
     report.outcome = outcome;
     report.headSha = outcome.headSha;
     const gatesFn = () => runGates({
@@ -47160,6 +47378,7 @@ async function run(inputs, env, deps) {
       log,
       sandbox: inputs.sandbox ?? false
     });
+    let reviewHead = outcome.headSha;
     const consensus = await log.group(
       "review",
       () => runConsensus({
@@ -47170,12 +47389,17 @@ async function run(inputs, env, deps) {
         reviewer,
         maxRounds: inputs.maxRounds,
         runGates: gatesFn,
-        holdDir,
         log,
         onProgress: async (rounds, gates) => {
           report.gates = gates;
-          await fs17.writeFile(path14.join(resultsDir, "review-progress.json"), JSON.stringify({ rounds, gates }, null, 2));
-          await onProgress(outcome.records, null);
+          await fs18.writeFile(path14.join(resultsDir, "review-progress.json"), JSON.stringify({ rounds, gates }, null, 2));
+          progress = outcome.records;
+          currentPatch = null;
+          if (outcome.headSha !== reviewHead) {
+            report.recoveryDir = path14.join(resultsDir, "recovery");
+            await saveRecovery(wt, plan, report.recoveryDir, progress, null);
+            reviewHead = outcome.headSha;
+          }
         }
       })
     );
@@ -47184,20 +47408,14 @@ async function run(inputs, env, deps) {
     report.headSha = consensus.headSha;
     report.notes.push(...consensus.notes);
     if (consensus.state !== "APPROVED") {
+      if (consensus.state === "CONTESTED" && consensus.gates.ok) {
+        await assertCandidate(wt, consensus.gates.candidate);
+        await exportCandidate(outcome, "contested");
+      }
       return await fail(consensus.state === "CONTESTED" ? "FAILED_CONTESTED" : "FAILED_GATE", consensus.reason, consensus.gates.failures);
     }
     await assertCandidate(wt, consensus.gates.candidate);
-    report.artifactDir = path14.join(resultsDir, "candidate");
-    report.artifactDigest = await writeCandidate(wt, report.artifactDir, plan, outcome, {
-      runId: env.runId,
-      runAttempt: env.runAttempt,
-      repository: inputs.repository,
-      upstream: inputs.upstream,
-      checkpointSha: checkpointSha ?? null,
-      kind: planned.kind,
-      autoEligible,
-      verifyCommand: inputs.verifyCommand ?? null
-    });
+    await exportCandidate(outcome, "approved");
     return await finish("PREPARED", `${consensus.reason}; immutable candidate exported for isolated verification`);
   } catch (err) {
     if (err instanceof AutopatchError) return await fail(err.state, err.message, err.details);
@@ -47209,7 +47427,7 @@ async function run(inputs, env, deps) {
 }
 
 // src/phases.ts
-var fs18 = __toESM(require("node:fs/promises"), 1);
+var fs19 = __toESM(require("node:fs/promises"), 1);
 var path15 = __toESM(require("node:path"), 1);
 
 // src/issue.ts
@@ -47252,7 +47470,7 @@ async function closeFailureIssue(api, owner, repo, branch, comment, log) {
 
 // src/phases.ts
 function checkContext(candidate, inputs, env) {
-  if (candidate.runId !== env.runId || candidate.runAttempt !== env.runAttempt || candidate.repository !== inputs.repository || candidate.upstream !== inputs.upstream || inputs.branch && candidate.branch !== inputs.branch || inputs.upstreamBranch && candidate.upstreamBranch !== inputs.upstreamBranch || candidate.verifyCommand !== (inputs.verifyCommand ?? null)) {
+  if (candidate.runId !== env.runId || candidate.repository !== inputs.repository || candidate.upstream !== inputs.upstream || inputs.branch && candidate.branch !== inputs.branch || inputs.upstreamBranch && candidate.upstreamBranch !== inputs.upstreamBranch || candidate.verifyCommand !== (inputs.verifyCommand ?? null)) {
     throw new AutopatchError("FAILED_TAMPERED", "candidate does not match this run, repository, branch, upstream, or verification command");
   }
 }
@@ -47261,15 +47479,21 @@ async function runPhase(inputs, env, deps) {
   const phase = inputs.phase;
   if (phase !== "verify" && phase !== "publish" && phase !== "report") throw new Error("runPhase requires verify, publish, or report");
   const base = path15.join(env.runnerTemp, `autopatch-${phase}`);
-  await fs18.rm(base, { recursive: true, force: true });
+  await fs19.rm(base, { recursive: true, force: true });
   const resultsDir = path15.join(base, "results");
-  await fs18.mkdir(resultsDir, { recursive: true });
+  await fs19.mkdir(resultsDir, { recursive: true });
   const now = (/* @__PURE__ */ new Date()).toISOString();
   if (phase === "report") {
     if (!inputs.artifactDir || !inputs.resultsDigest) throw new Error("report requires artifact_dir and results_digest from the failed job");
     const failed = await readBoundJson(path15.join(inputs.artifactDir, "results.json"), inputs.resultsDigest);
     if (failed.repository !== inputs.repository || failed.upstream !== inputs.upstream || failed.runId !== env.runId || !failed.state.startsWith("FAILED_")) {
       throw new AutopatchError("FAILED_TAMPERED", "failure report does not match this run");
+    }
+    if (inputs.rescueBranch) {
+      const prefix = tempBranchName(env.runId, "");
+      if (!inputs.rescueBranch.startsWith(prefix) || !/^\d+$/.test(inputs.rescueBranch.slice(prefix.length))) throw new AutopatchError("FAILED_TAMPERED", "rescue branch belongs to a different run");
+      failed.tempBranch = inputs.rescueBranch;
+      failed.tempBranchRemote = true;
     }
     if (deps.issues && !inputs.dryRun) {
       const [owner, repo] = inputs.repository.split("/");
@@ -47283,6 +47507,9 @@ async function runPhase(inputs, env, deps) {
       );
       failed.notes.push(`issue: ${url2}`);
     }
+    failed.reportedFailureState = failed.state;
+    failed.reason = `Reported ${failed.state}: ${failed.reason}`;
+    failed.state = "REPORTED";
     await writeResults(resultsDir, failed, null);
     return failed;
   }
@@ -47309,8 +47536,12 @@ async function runPhase(inputs, env, deps) {
   };
   try {
     if (!inputs.artifactDir || !inputs.candidateDigest) throw new AutopatchError("FAILED_PLAN", "artifact_dir and candidate_digest from the prepare job are required");
-    const { git, candidate, plan } = await importCandidate(inputs.artifactDir, inputs.candidateDigest, path15.join(base, "repo"), phase === "publish");
-    checkContext(candidate, inputs, env);
+    const { git, candidate, plan } = await importCandidate(inputs.artifactDir, inputs.candidateDigest, path15.join(base, "repo"), {
+      source: inputs.forkRemoteUrl ?? `${env.serverUrl}/${inputs.repository}.git`,
+      token: inputs.token,
+      bare: phase === "publish",
+      checkContext: (candidate2) => checkContext(candidate2, inputs, env)
+    });
     report.plan = candidate.kind === "fast_forward" ? {
       kind: "fast_forward",
       branch: candidate.branch,
@@ -47349,9 +47580,9 @@ async function runPhase(inputs, env, deps) {
       if (!gates.ok) throw new AutopatchError("FAILED_GATE", "isolated verification failed", gates.failures);
       await assertCandidate(git, candidate);
       report.artifactDir = path15.join(resultsDir, "verification");
-      await fs18.mkdir(report.artifactDir);
+      await fs19.mkdir(report.artifactDir);
       const file2 = path15.join(report.artifactDir, "verification.json");
-      await fs18.writeFile(file2, JSON.stringify(verificationSchema.parse({
+      await fs19.writeFile(file2, JSON.stringify(verificationSchema.parse({
         version: 1,
         runId: env.runId,
         runAttempt: env.runAttempt,
@@ -47365,45 +47596,54 @@ async function runPhase(inputs, env, deps) {
       report.state = "VERIFIED";
       report.reason = "the exact candidate passed verification on a fresh checkout";
     } else {
-      if (!inputs.verificationDir || !inputs.verificationDigest) throw new AutopatchError("FAILED_PLAN", "verification_dir and verification_digest from the verification job are required");
-      const verification = verificationSchema.parse(await readBoundJson(path15.join(inputs.verificationDir, "verification.json"), inputs.verificationDigest));
-      if (verification.candidateDigest !== inputs.candidateDigest || verification.runId !== env.runId || verification.runAttempt !== env.runAttempt || verification.headSha !== candidate.headSha || verification.treeSha !== candidate.treeSha || verification.verifyCommand !== (inputs.verifyCommand ?? null)) {
-        throw new AutopatchError("FAILED_TAMPERED", "verification belongs to a different candidate, run, or command");
+      if (candidate.approval === "approved") {
+        if (!inputs.verificationDir || !inputs.verificationDigest) throw new AutopatchError("FAILED_PLAN", "verification_dir and verification_digest from the verification job are required");
+        const verification = verificationSchema.parse(await readBoundJson(path15.join(inputs.verificationDir, "verification.json"), inputs.verificationDigest));
+        if (verification.candidateDigest !== inputs.candidateDigest || verification.runId !== env.runId || verification.headSha !== candidate.headSha || verification.treeSha !== candidate.treeSha || verification.verifyCommand !== (inputs.verifyCommand ?? null)) {
+          throw new AutopatchError("FAILED_TAMPERED", "verification belongs to a different candidate, run, or command");
+        }
       }
       await git.ensureRemote("origin", inputs.forkRemoteUrl ?? `${env.serverUrl}/${inputs.repository}.git`);
       const remote = await git.authenticated(inputs.token);
       const branch = inputs.branch ?? await remote.remoteDefaultBranch("origin");
       if (branch !== candidate.branch) throw new AutopatchError("FAILED_PLAN", "candidate branch differs from the maintained branch");
-      const checkpointSha = await fetchCheckpoint(remote, branch);
-      if ((checkpointSha ?? null) !== candidate.checkpointSha) throw new AutopatchError("FAILED_PUBLISH", "upstream checkpoint changed since planning");
-      const ctx = {
-        git: remote,
-        branch,
-        leaseSha: candidate.originalSha,
-        upstreamSha: candidate.upstreamSha,
-        checkpointSha: checkpointSha ?? null,
-        runId: env.runId,
-        runAttempt: env.runAttempt,
-        token: inputs.token,
-        dryRun: inputs.dryRun,
-        log
-      };
-      report.tempBranch = tempBranchName(env.runId, env.runAttempt);
-      await pushTempBranch(ctx, candidate.headSha, report.tempBranch);
-      report.tempBranchRemote = !inputs.dryRun;
-      report.leftoverBranches = await listLeftoverBranches(remote, report.tempBranch).catch(() => []);
-      if (inputs.publish === "stage" || !candidate.autoEligible) {
-        report.state = "STAGED";
-        report.reason = `${inputs.dryRun ? "dry run: would stage" : "staged"} verified candidate on ${report.tempBranch}; default branch was not updated`;
-      } else {
-        report.publish = await publishBranch(ctx, candidate.headSha, report.tempBranch, inputs.keepBackups);
-        report.notes.push(...report.publish.warnings ?? []);
+      const prior = candidate.approval === "approved" && candidate.autoEligible && inputs.publish === "auto" ? await findPublishedCandidate(remote, branch, env.runId, candidate.originalSha, candidate.headSha, candidate.upstreamSha) : void 0;
+      if (prior) {
+        report.publish = { backupRef: prior, pushed: true, prunedBackups: [] };
         report.state = candidate.kind === "fast_forward" ? "FAST_FORWARDED" : "APPROVED";
-        report.reason = inputs.dryRun ? "dry run: verified candidate was not pushed" : `published verified candidate ${candidate.headSha}`;
-        if (deps.issues && !inputs.dryRun) {
-          const [owner, repo] = inputs.repository.split("/");
-          await closeFailureIssue(deps.issues, owner, repo, branch, report.reason, log).catch((e) => report.notes.push(`issue cleanup failed: ${String(e)}`));
+        report.reason = "this exact candidate was already published by an earlier attempt";
+      } else {
+        const checkpointSha = await fetchCheckpoint(remote, branch);
+        if ((checkpointSha ?? null) !== candidate.checkpointSha) throw new AutopatchError("FAILED_PUBLISH", "upstream checkpoint changed since planning");
+        const ctx = {
+          git: remote,
+          branch,
+          leaseSha: candidate.originalSha,
+          upstreamSha: candidate.upstreamSha,
+          checkpointSha: checkpointSha ?? null,
+          runId: env.runId,
+          runAttempt: env.runAttempt,
+          token: inputs.token,
+          dryRun: inputs.dryRun,
+          log
+        };
+        report.tempBranch = tempBranchName(env.runId, env.runAttempt);
+        await pushTempBranch(ctx, candidate.headSha, report.tempBranch);
+        report.tempBranchRemote = !inputs.dryRun;
+        report.leftoverBranches = await listLeftoverBranches(remote, report.tempBranch).catch(() => []);
+        if (inputs.publish === "stage" || !candidate.autoEligible || candidate.approval === "contested") {
+          report.state = "STAGED";
+          report.reason = `${inputs.dryRun ? "dry run: would stage" : "staged"} ${candidate.approval === "contested" ? "contested rescue" : "verified"} candidate on ${report.tempBranch}; default branch was not updated`;
+        } else {
+          report.publish = await publishBranch(ctx, candidate.headSha, report.tempBranch, inputs.keepBackups);
+          report.notes.push(...report.publish.warnings ?? []);
+          report.state = candidate.kind === "fast_forward" ? "FAST_FORWARDED" : "APPROVED";
+          report.reason = inputs.dryRun ? "dry run: verified candidate was not pushed" : `published verified candidate ${candidate.headSha}`;
         }
+      }
+      if (report.publish?.pushed && deps.issues && !inputs.dryRun) {
+        const [owner, repo] = inputs.repository.split("/");
+        await closeFailureIssue(deps.issues, owner, repo, branch, report.reason, log).catch((e) => report.notes.push(`issue cleanup failed: ${String(e)}`));
       }
     }
   } catch (e) {
@@ -47444,7 +47684,7 @@ async function main() {
   setOutput("state", report.state);
   setOutput("branch_sha", report.headSha ?? "");
   setOutput("backup_ref", report.publish?.backupRef ?? "");
-  setOutput("temp_branch", report.publish?.pushed ? "" : report.tempBranch ?? "");
+  setOutput("temp_branch", report.tempBranchRemote && !report.publish?.pushed ? report.tempBranch ?? "" : "");
   const resultsDir = `${env.runnerTemp}/${inputs.phase === "prepare" ? "autopatch" : `autopatch-${inputs.phase}`}/results`;
   setOutput("results_dir", resultsDir);
   setOutput("results_digest", await fileDigest(`${resultsDir}/results.json`));

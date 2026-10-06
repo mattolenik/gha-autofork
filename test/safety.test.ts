@@ -26,7 +26,7 @@ async function review(script: FakeScript, verifyCommand?: string, maxRounds = 1)
   const reviewer = new AgentRunner({ backend: h.backend, model: '', role: 'reviewer', budget: h.budget,
     maxTurns: 10, timeoutMs: 60000, env: {}, transcriptsDir: null, log: silentLogger });
   return runConsensus({ git: h.wt, plan: h.plan, outcome, worker: h.runner, reviewer, maxRounds,
-    holdDir: path.join(fx.root, 'hold'), log: silentLogger,
+    log: silentLogger,
     runGates: () => runGates({ git: h.wt, plan: h.plan, expectedCount: outcome.mapping.size, env: buildChildEnv(), log: silentLogger, verifyCommand }) });
 }
 
@@ -57,9 +57,11 @@ describe('approval invariants', () => {
     expect((await review({ review: [{ verdict: 'reject', issues: [], summary: 'could not review' }] })).state).toBe('CONTESTED');
   });
 
-  it('rejects empty and duplicate skip references', async () => {
+  it('treats invalid skip references as unapproved review feedback', async () => {
     fx = await createFixture();
-    await expect(review({ review: [{ skips_approved: [{ patch: '', approved: true, reason: 'empty' }] }] })).rejects.toMatchObject({ state: 'FAILED_AGENT' });
+    const result = await review({ review: [{ skips_approved: [{ patch: '', approved: true, reason: 'empty' }] }] });
+    expect(result.state).toBe('CONTESTED');
+    expect(result.rounds[0]!.syntheticIssues.some(i => i.id === 'skip-report')).toBe(true);
   });
 
   it('detects no progress despite changing issue IDs', async () => {

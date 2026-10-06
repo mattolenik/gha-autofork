@@ -10,7 +10,9 @@ export interface CandidateIdentity {
 }
 
 export async function candidateIdentity(git: Git): Promise<CandidateIdentity> {
-  return { headSha: await git.revParse('HEAD'), treeSha: await git.tree() };
+  const [headSha, treeSha] = await git.lines(['rev-parse', 'HEAD', 'HEAD^{tree}']);
+  if (!headSha || !treeSha) throw new Error('could not resolve candidate identity');
+  return { headSha, treeSha };
 }
 
 async function hashPath(p: string): Promise<string | null> {
@@ -26,31 +28,43 @@ async function hashPath(p: string): Promise<string | null> {
 
 /** Logical index entries avoid false alarms caused by Git's stat-cache refreshes. */
 export async function gitState(git: Git): Promise<string> {
-  const common = await git.commonDir();
+  const { gitDir, commonDir: common } = await git.layout();
   const metadata = ['HEAD', 'REBASE_HEAD', 'ORIG_HEAD', 'MERGE_HEAD', 'CHERRY_PICK_HEAD', 'rebase-merge', 'rebase-apply', 'sequencer'];
   return JSON.stringify({
-    head: await git.out(['rev-parse', 'HEAD']),
-    refs: await git.out(['for-each-ref', '--format=%(refname) %(objectname)']),
+    refs: await hashPath(path.join(common, 'refs')),
+    packedRefs: await hashPath(path.join(common, 'packed-refs')),
+    reftable: await hashPath(path.join(common, 'reftable')),
+    worktreeRefs: gitDir === common ? null : await hashPath(path.join(gitDir, 'refs')),
+    worktreeReftable: gitDir === common ? null : await hashPath(path.join(gitDir, 'reftable')),
+    stashLog: await hashPath(path.join(common, 'logs/refs/stash')),
     index: (await git.run(['ls-files', '--stage', '-v', '-z'])).stdout,
-    metadata: await Promise.all(metadata.map(async n => [n, await hashPath(await git.gitPath(n))])),
+    metadata: await Promise.all(metadata.map(async n => [n, await hashPath(path.join(gitDir, n))])),
     config: await hashPath(path.join(common, 'config')),
-    worktreeConfig: await hashPath(await git.gitPath('config.worktree')),
+    worktreeConfig: await hashPath(path.join(gitDir, 'config.worktree')),
     gitFile: (await fs.lstat(path.join(git.cwd, '.git'))).isDirectory() ? null : await hashPath(path.join(git.cwd, '.git')),
   });
+}
+
+async function worktreeState(git: Git): Promise<string> {
+  const status = await git.statusPorcelain();
+  const files = await Promise.all(status.map(async entry => {
+    const rel = entry.slice(3);
+    await validateFilePath(git.cwd, rel);
+    return [entry, await hashPath(path.join(git.cwd, rel))];
+  }));
+  return JSON.stringify(files);
 }
 
 /** Every external call has an explicit mutation contract, including failed calls. */
 export async function guardGit<T>(git: Git, mode: 'edit' | 'readonly', label: string, call: () => Promise<T>): Promise<T> {
   const before = await gitState(git);
-  const beforeDiff = mode === 'readonly' ? (await git.run(['diff', '--binary', '--no-ext-diff', '--no-textconv'])).stdout : null;
-  const beforeStatus = mode === 'readonly' ? await git.statusPorcelain() : null;
+  const beforeFiles = mode === 'readonly' ? await worktreeState(git) : null;
   try {
     return await call();
   } finally {
     try {
       if (await gitState(git) !== before) throw new AutopatchError('FAILED_TAMPERED', `${label} changed Git metadata or the index`);
-      if (mode === 'readonly' && (JSON.stringify(await git.statusPorcelain()) !== JSON.stringify(beforeStatus) ||
-        (await git.run(['diff', '--binary', '--no-ext-diff', '--no-textconv'])).stdout !== beforeDiff)) {
+      if (mode === 'readonly' && await worktreeState(git) !== beforeFiles) {
         throw new AutopatchError('FAILED_TAMPERED', `${label} changed the worktree during a read-only operation`);
       }
     } catch (e) {

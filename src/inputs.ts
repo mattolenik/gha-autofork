@@ -54,6 +54,7 @@ const numString = (min: number) =>
     .pipe(z.number().min(min));
 
 const optionalString = z.string().trim().transform((s) => (s === '' ? undefined : s));
+const cliVersion = optionalString.pipe(z.string().regex(/^\d+\.\d+\.\d+$/, 'must be an exact CLI version').optional()).optional();
 
 export const inputsSchema = z.object({
   upstream: z.string().trim().min(1, 'upstream is required'),
@@ -94,6 +95,9 @@ export const inputsSchema = z.object({
   sandbox: boolString.optional(),
   requireHardLimits: boolString.optional(),
   resultsDigest: optionalString.optional(),
+  claudeVersion: cliVersion,
+  codexVersion: cliVersion,
+  rescueBranch: optionalString.optional(),
 });
 
 export type Inputs = z.infer<typeof inputsSchema>;
@@ -133,6 +137,9 @@ const INPUT_NAMES: { [K in keyof Inputs]-?: string } = {
   sandbox: 'sandbox',
   requireHardLimits: 'require_hard_limits',
   resultsDigest: 'results_digest',
+  claudeVersion: 'claude_version',
+  codexVersion: 'codex_version',
+  rescueBranch: 'rescue_branch',
 };
 
 export function readRawInputs(): RawInputs {

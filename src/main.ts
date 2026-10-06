@@ -39,7 +39,7 @@ async function main(): Promise<void> {
   core.setOutput('state', report.state);
   core.setOutput('branch_sha', report.headSha ?? '');
   core.setOutput('backup_ref', report.publish?.backupRef ?? '');
-  core.setOutput('temp_branch', report.publish?.pushed ? '' : (report.tempBranch ?? ''));
+  core.setOutput('temp_branch', report.tempBranchRemote && !report.publish?.pushed ? report.tempBranch ?? '' : '');
   const resultsDir = `${env.runnerTemp}/${inputs.phase === 'prepare' ? 'autopatch' : `autopatch-${inputs.phase}`}/results`;
   core.setOutput('results_dir', resultsDir);
   core.setOutput('results_digest', await fileDigest(`${resultsDir}/results.json`));

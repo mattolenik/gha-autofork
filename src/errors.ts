@@ -6,6 +6,7 @@ export const STATES = [
   'STAGED',
   'PREPARED',
   'VERIFIED',
+  'REPORTED',
   'FAILED_PLAN',
   'FAILED_REBASE',
   'FAILED_GATE',

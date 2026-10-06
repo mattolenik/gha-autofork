@@ -57,6 +57,13 @@ export interface GitOptions {
   env?: Record<string, string>;
 }
 
+export interface GitLayout { gitDir: string; commonDir: string }
+
+/** Network and repository-wide operations are bounded by the job timeout, not a five-minute kill. */
+export function defaultGitTimeout(args: string[]): number {
+  return ['clone', 'fetch', 'push', 'bundle', 'repack', 'gc'].includes(args[0] ?? '') ? 0 : 5 * 60_000;
+}
+
 function baseEnvFromProcess(): Record<string, string> {
   const keep = ['PATH', 'HOME', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'SSH_AUTH_SOCK', 'XDG_CONFIG_HOME'];
   const out: Record<string, string> = {};
@@ -72,6 +79,7 @@ export class Git {
   readonly cwd: string;
   private readonly config: Record<string, string>;
   private readonly env: Record<string, string>;
+  private layoutPromise: Promise<GitLayout> | undefined;
 
   constructor(cwd: string, options: GitOptions = {}) {
     this.cwd = cwd;
@@ -101,7 +109,9 @@ export class Git {
   }
 
   withConfig(config: Record<string, string>): Git {
-    return new Git(this.cwd, { config: { ...this.config, ...config }, env: this.env });
+    const git = new Git(this.cwd, { config: { ...this.config, ...config }, env: this.env });
+    git.layoutPromise = this.layoutPromise;
+    return git;
   }
 
   async run(args: string[], options: GitRunOptions = {}): Promise<GitResult> {
@@ -119,7 +129,7 @@ export class Git {
           env: { ...this.env, ...options.env },
           maxBuffer: 256 * 1024 * 1024,
           encoding: 'utf8',
-          timeout: options.timeoutMs ?? 5 * 60_000,
+          timeout: options.timeoutMs ?? defaultGitTimeout(args),
           killSignal: 'SIGKILL',
         },
         (err, stdout, stderr) => {
@@ -160,7 +170,16 @@ export class Git {
   }
 
   async commonDir(): Promise<string> {
-    return path.resolve(this.cwd, await this.out(['rev-parse', '--git-common-dir']));
+    return (await this.layout()).commonDir;
+  }
+
+  /** Worktree layout is stable; guards separately fingerprint its .git indirection. */
+  layout(): Promise<GitLayout> {
+    this.layoutPromise ??= this.lines(['rev-parse', '--path-format=absolute', '--git-dir', '--git-common-dir']).then(([gitDir, commonDir]) => {
+      if (!gitDir || !commonDir) throw new Error('could not resolve Git worktree layout');
+      return { gitDir, commonDir };
+    });
+    return this.layoutPromise;
   }
 
   async requireSupportedVersion(): Promise<void> {
@@ -186,10 +205,14 @@ export class Git {
   }
 
   async gitDir(): Promise<string> {
-    return path.resolve(this.cwd, await this.out(['rev-parse', '--git-dir']));
+    return (await this.layout()).gitDir;
   }
 
   async gitPath(name: string): Promise<string> {
+    if (['HEAD', 'REBASE_HEAD', 'ORIG_HEAD', 'MERGE_HEAD', 'CHERRY_PICK_HEAD', 'index', 'rebase-merge', 'rebase-apply', 'sequencer', 'config.worktree'].includes(name)) {
+      return path.join((await this.layout()).gitDir, name);
+    }
+    if (name === 'config') return path.join((await this.layout()).commonDir, name);
     return path.resolve(this.cwd, await this.out(['rev-parse', '--git-path', name]));
   }
 

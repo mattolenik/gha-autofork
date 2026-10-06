@@ -17,7 +17,7 @@ import {
   type ReviewContext,
   type RoundHistory,
 } from './prompts/review.js';
-import type { ReviewVerdict } from './schemas.js';
+import type { RespondReport, ReviewVerdict } from './schemas.js';
 
 export type ConsensusState = 'APPROVED' | 'CONTESTED' | 'GATE_FAILED';
 
@@ -40,7 +40,6 @@ export interface ConsensusOptions {
   maxRounds: number;
   /** Runs the deterministic gates against the current HEAD. */
   runGates: () => Promise<GateResult>;
-  holdDir: string;
   log: Logger;
   caps?: { diff?: number };
   onProgress?: (rounds: RoundHistory[], gates: GateResult) => Promise<void>;
@@ -124,9 +123,15 @@ export async function runConsensus(o: ConsensusOptions): Promise<ConsensusResult
         }
         const decisions = new Map<string, ReviewVerdict['skips_approved'][number]>();
         const skippedMapping = new Map(skipped.map(r => [r.sha, r.sha]));
+        const invalidDecisions = new Set<string>();
         for (const decision of verdict.skips_approved) {
           const sha = resolvePatchRef(decision.patch, skippedMapping);
-          if (!sha || decisions.has(sha)) throw new AutopatchError('FAILED_AGENT', `invalid, ambiguous, or duplicate skip approval: ${JSON.stringify(decision.patch)}`);
+          if (!sha || decisions.has(sha) || invalidDecisions.has(sha)) {
+            if (sha) { decisions.delete(sha); invalidDecisions.add(sha); }
+            entry.syntheticIssues.push({ id: 'skip-report', severity: 'blocker', patch: null, file: null,
+              description: `Invalid, ambiguous, or duplicate skip decision ${JSON.stringify(decision.patch)}. Return one decision per skipped patch using its full original SHA.`, suggested_fix: null });
+            continue;
+          }
           decisions.set(sha, decision);
         }
         for (const rec of skipped) {
@@ -180,30 +185,55 @@ export async function runConsensus(o: ConsensusOptions): Promise<ConsensusResult
     if (round === o.maxRounds) break;
 
     const ctx = await context(entry.selfCheck);
-    const response = await guardGit(git, 'edit', 'review worker', () => o.worker.structured({
+    let response: RespondReport | undefined;
+    let problems: string[] = [];
+    // Reporting mistakes are repairable. Keep the edits so the worker can correct its report or
+    // remove accidental files, while the Git metadata guard remains a hard boundary.
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      response = await guardGit(git, 'edit', 'review worker', () => o.worker.structured({
         schemaName: 'respond',
         system: respondSystemPrompt(),
-        user: respondUserPrompt(ctx, issues),
+        user: respondUserPrompt(ctx, issues) + (problems.length ? `\n\n## Correct your previous attempt\n${problems.map(p => `- ${p}`).join('\n')}\nYour edits are still in the worktree and have not been folded. Report all intended changes; remove accidental files.\nPrevious report:\n${JSON.stringify(response)}` : ''),
         cwd: git.cwd,
         mode: 'edit',
-        meta: { round: String(round), issueIds: ids },
+        meta: { round: String(round), issueIds: ids, attempt: String(attempt) },
       }));
-    entry.response = response;
-    log.info(`round ${round}: worker responded (${response.verdict}) — ${response.summary}; ${response.files_changed.length} file(s) changed`);
-
-    const dirty = await git.statusPorcelain();
-    const changedSet = new Set(response.files_changed);
-    for (const file of changedSet) await validateFilePath(git.cwd, file);
-    const unreported = dirty.map((l) => l.slice(3)).filter((p) => !changedSet.has(p));
-    if (unreported.length > 0) {
-      throw new AutopatchError('FAILED_TAMPERED', 'review worker changed unreported files', unreported);
+      problems = [];
+      const changedSet = new Set(response.files_changed);
+      for (const file of changedSet) {
+        try { await validateFilePath(git.cwd, file); }
+        catch (e) { problems.push(e instanceof Error ? e.message : String(e)); }
+      }
+      const unreported = (await git.statusPorcelain()).map(l => l.slice(3)).filter(p => !changedSet.has(p));
+      if (unreported.length) problems.push(`unreported worktree changes: ${unreported.join(', ')}`);
+      const targets = new Set<string>();
+      for (const item of response.responses) {
+        if (item.action !== 'fixed' || !item.target_patch) continue;
+        const target = resolvePatchRef(item.target_patch, outcome.mapping);
+        if (!target) problems.push(`invalid or ambiguous fixup target: ${item.target_patch}`);
+        else targets.add(target);
+      }
+      if (targets.size > 1) problems.push('fixes must name one owning patch per round; defer the other patch fixes');
+      if (!problems.length) break;
+      notes.push(`round ${round}, response attempt ${attempt}: ${problems.join('; ')}`);
+      log.warning(notes[notes.length - 1]!);
     }
+    if (!response) throw new Error('unreachable: worker response missing');
+    entry.response = response;
+    if (problems.length) {
+      entry.syntheticIssues.push(...problems.map((description, i) => ({ id: `response-${i}`, severity: 'blocker' as const,
+        patch: null, file: null, description, suggested_fix: null })));
+      gates = { ...gates, ok: false, failures: [...gates.failures, ...problems] };
+      await o.onProgress?.(history, gates);
+      return { state: 'GATE_FAILED', rounds: history, gates, headSha: await git.revParse('HEAD'), notes,
+        reason: 'worker reporting problems remain after correction; pending edits retained for recovery' };
+    }
+    log.info(`round ${round}: worker responded (${response.verdict}) — ${response.summary}; ${response.files_changed.length} file(s) changed`);
 
     previousChangedFiles = false;
     if (response.files_changed.length > 0) {
-      const targets = new Set(response.responses.map((r) => r.target_patch).filter((t): t is string => !!t));
-      for (const target of targets) if (!resolvePatchRef(target, outcome.mapping)) throw new AutopatchError('FAILED_AGENT', `invalid fixup target: ${target}`);
-      if (targets.size > 1) throw new AutopatchError('FAILED_AGENT', 'review fixes must target one patch per round; split multi-patch fixes across rounds');
+      const targets = new Set(response.responses.filter(r => r.action === 'fixed' && r.target_patch)
+        .map(r => resolvePatchRef(r.target_patch!, outcome.mapping)).filter((t): t is string => !!t));
       const fold = await foldChanges({
         git,
         plan,

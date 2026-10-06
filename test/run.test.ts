@@ -132,7 +132,7 @@ describe('run (end to end with the fake backend)', () => {
 
   it('reports nothing to do without touching the remote', async () => {
     fx = await createFixture();
-    const { report, issues } = await go({});
+    const { report, issues } = await go({}, { initialBase: undefined });
     expect(report.state).toBe('NOTHING_TO_DO');
     expect(report.agentCalls).toBe(0);
     expect(issues.calls).toEqual([]);

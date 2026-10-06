@@ -31,6 +31,14 @@ inputs:
   require_hard_limits:
     description: Reject backends without enforced turn and dollar limits (currently Codex).
     default: 'false'
+  claude_version:
+    description: Exact Claude Code version to install or require from a preinstalled binary.
+    default: '2.1.288'
+  codex_version:
+    description: Exact Codex CLI version to install or require from a preinstalled binary.
+    default: '0.160.0'
+  rescue_branch:
+    description: Published rescue branch from the publish job output (report phase only).
   upstream:
     description: Upstream repository as owner/repo or a full URL.
     required: true
@@ -87,7 +95,7 @@ inputs:
   publish:
     description: auto force-pushes after approval; stage leaves the temporary branch for manual promotion.
     required: false
-    default: stage
+    default: auto
   install_clis:
     description: Install missing agent CLIs on the runner.
     required: false
@@ -115,7 +123,7 @@ inputs:
 
 outputs:
   state:
-    description: PREPARED, VERIFIED, STAGED, APPROVED, NOTHING_TO_DO, FAST_FORWARDED, or a FAILED_* value.
+    description: PREPARED, VERIFIED, STAGED, APPROVED, REPORTED, NOTHING_TO_DO, FAST_FORWARDED, or a FAILED_* value.
   branch_sha:
     description: SHA the branch points at after the run.
   backup_ref:

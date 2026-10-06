@@ -20,7 +20,10 @@ export async function sandboxCommand(bin: string, args: string[], cwd: string, m
   const home = '/tmp/autopatch-home';
   const sandboxArgs = ['--die-with-parent', '--new-session', '--unshare-user', '--unshare-pid', '--unshare-ipc', '--unshare-uts',
     '--cap-drop', 'ALL', '--ro-bind', '/', '/', '--proc', '/proc', '--dev', '/dev',
-    '--tmpfs', '/tmp', '--tmpfs', '/run', '--tmpfs', '/home', '--tmpfs', '/root',
+    '--tmpfs', '/tmp', '--tmpfs', '/run',
+    // Ubuntu's /etc/resolv.conf commonly points into this otherwise-hidden directory.
+    '--ro-bind-try', '/run/systemd/resolve', '/run/systemd/resolve',
+    '--tmpfs', '/home', '--tmpfs', '/root',
     '--dir', home, mode === 'edit' ? '--bind' : '--ro-bind', cwd, cwd,
     '--ro-bind', common, common];
   if (gitFile !== common) sandboxArgs.push('--ro-bind', gitFile, gitFile);

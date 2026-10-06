@@ -39,7 +39,7 @@ describe('portable recovery checkpoints', () => {
     const checkpoint = JSON.parse(await fs.readFile(path.join(report.recoveryDir!, 'recovery.json'), 'utf8')) as { pending: string[] };
     expect(checkpoint.pending).toEqual(fx.patchShas.slice(index));
     const destination = path.join(fx.root, 'rescued');
-    await restoreRecovery(report.recoveryDir!, destination);
+    await restoreRecovery(report.recoveryDir!, destination, fx.originBare);
     const git = new Git(destination);
     expect(await git.revParse('REBASE_HEAD')).toBe(fx.patchShas[index]);
     for (const [file, content] of Object.entries(replacements)) {
@@ -59,7 +59,7 @@ describe('portable recovery checkpoints', () => {
       { log: silentLogger, createBackend: () => new FakeBackend(undefined, { resolve: { 'fork: greet shouts': { files: { 'src/lib.js': fixedLib } } } }) });
     expect(report.state, report.reason).toBe('FAILED_REBASE');
     const destination = path.join(fx.root, 'rescued');
-    await restoreRecovery(report.recoveryDir!, destination);
+    await restoreRecovery(report.recoveryDir!, destination, fx.originBare);
     expect(await fs.readFile(path.join(destination, 'src/lib.js'), 'utf8')).toBe(fixedLib);
     expect(await new Git(destination).revParse('REBASE_HEAD')).toBe(fx.patchShas[2]);
   });

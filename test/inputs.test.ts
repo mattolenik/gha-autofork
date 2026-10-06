@@ -29,6 +29,10 @@ function raw(overrides: Partial<RawInputs> = {}): RawInputs {
 }
 
 describe('parseInputs', () => {
+  it('accepts exact CLI overrides and rejects floating versions', () => {
+    expect(parseInputs(raw({ claudeVersion: '2.2.0', codexVersion: '0.170.0' }))).toMatchObject({ claudeVersion: '2.2.0', codexVersion: '0.170.0' });
+    expect(() => parseInputs(raw({ claudeVersion: 'latest' }))).toThrow(/claude_version/);
+  });
   it('parses a full set of inputs', () => {
     const i = parseInputs(raw());
     expect(i.worker).toEqual({ backend: 'claude', model: 'claude-opus-5-5' });

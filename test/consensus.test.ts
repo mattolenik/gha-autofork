@@ -50,7 +50,6 @@ async function setup(script: FakeScript, upstreamFiles: Record<string, string | 
         worker: h.runner,
         reviewer: opts.reviewer === false ? null : reviewer,
         maxRounds: opts.maxRounds ?? 3,
-        holdDir: path.join(fx.root, 'hold'),
         log: silentLogger,
         runGates: () =>
           runGates({
@@ -68,6 +67,32 @@ async function setup(script: FakeScript, upstreamFiles: Record<string, string | 
 const calls = (h: Harness) => h.backend.calls.map((c) => c.schemaName);
 
 describe('runConsensus', () => {
+  it('lets the worker correct a bad target and remove a stray file without losing its intended edit', async () => {
+    fx = await createFixture();
+    const issue = { id: 'I1', severity: 'major' as const, patch: null, file: 'NOTES.fork.md', description: 'fix notes', suggested_fix: null };
+    const s = await setup({ review: [{ verdict: 'reject', issues: [issue] }, { verdict: 'approve' }], respond: [
+      { files: { 'NOTES.fork.md': 'fixed notes\n' }, hook: 'echo scratch > scratch.txt', responses: [{ issue_id: 'I1', action: 'fixed', explanation: 'fixed', target_patch: 'not-a-sha' }] },
+      { files_changed: ['NOTES.fork.md'], hook: 'rm scratch.txt', responses: [{ issue_id: 'I1', action: 'fixed', explanation: 'corrected report', target_patch: fx.patchShas[1]! }] },
+    ] });
+    const result = await s.run();
+    expect(result.state).toBe('APPROVED');
+    expect(calls(s.h).filter(c => c === 'respond')).toHaveLength(2);
+    expect(s.h.backend.calls.find(c => c.meta.attempt === '2' && c.schemaName === 'respond')!.prompt).toContain('unreported worktree changes: scratch.txt');
+    expect(await readFile(s.h.wtDir, 'NOTES.fork.md')).toBe('fixed notes\n');
+    expect(await s.h.wt.statusPorcelain()).toEqual([]);
+  });
+
+  it('keeps unresolved reporting mistakes unapproved after bounded correction attempts', async () => {
+    fx = await createFixture();
+    const s = await setup({ review: [{ verdict: 'reject', summary: 'fix this', issues: [{ id: 'I1', severity: 'major', patch: null, file: null, description: 'fix', suggested_fix: null }] }],
+      respond: [{ files: { 'NOTES.fork.md': 'pending edit\n' }, responses: [{ issue_id: 'I1', action: 'fixed', explanation: 'bad report', target_patch: 'bad' }] }] });
+    const result = await s.run();
+    expect(result.state).toBe('GATE_FAILED');
+    expect(result.reason).toContain('reporting problems');
+    expect(calls(s.h).filter(c => c === 'respond')).toHaveLength(2);
+    expect(await readFile(s.h.wtDir, 'NOTES.fork.md')).toBe('pending edit\n');
+  });
+
   it('approves in round one when worker and reviewer agree', async () => {
     fx = await createFixture();
     const s = await setup({});
@@ -202,7 +227,6 @@ describe('runConsensus', () => {
       worker: h.runner,
       reviewer,
       maxRounds: 3,
-      holdDir: path.join(fx.root, 'hold'),
       log: silentLogger,
       runGates: () => runGates({ git: h.wt, plan: h.plan, expectedCount: outcome.mapping.size, env: buildChildEnv(), log: silentLogger }),
     });

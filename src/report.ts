@@ -33,6 +33,7 @@ export interface RunReport {
   artifactDir?: string;
   artifactDigest?: string;
   backendVersions?: Record<string, string>;
+  reportedFailureState?: State;
 }
 
 export async function writeResults(dir: string, report: RunReport, rangeDiff: string | null): Promise<string> {
@@ -134,8 +135,8 @@ export function renderSummary(r: RunReport, opts: { forIssue: boolean; runUrl?: 
 
   if (r.recoveryDir && !r.tempBranchRemote) {
     lines.push(r.outcome ? '### Recover a completed candidate' : '### Resume an incomplete rebase', '', 'Download the results artifact and restore its recovery checkpoint with the trusted recovery tool:', '',
-      fence('npx tsx scripts/recover.ts /path/to/results/recovery /path/to/new-rescue-directory', 'sh'), '',
-      'The checkpoint includes the original history, completed resolutions, index, and pending rebase commands. Inspect git status and continue the rebase. A partial branch must not be promoted to the default branch.');
+      fence('npx tsx scripts/recover.ts /path/to/results/recovery /path/to/new-rescue-directory <fork-url-or-existing-clone>', 'sh'), '',
+      'The checkpoint contains incremental history, dirty files, staged resolutions, and pending rebase commands. The supplied repository must still contain the original fork tip. Inspect git status and continue the rebase. A partial branch must not be promoted to the default branch.');
   }
   if (opts.forIssue && r.plan && r.tempBranch && r.outcome && r.tempBranchRemote) {
     const branch = r.plan.branch;
@@ -145,9 +146,9 @@ export function renderSummary(r: RunReport, opts: { forIssue: boolean; runUrl?: 
     lines.push(
       fence(
         [
-          `git fetch origin ${quote(r.tempBranch)} ${quote(branch)}`,
+          `git fetch origin ${quote(r.tempBranch)} ${quote(branch)} ${quote(r.plan.branchSha)}`,
           `git checkout -b autopatch-rescue ${quote(`origin/${r.tempBranch}`)}`,
-          `git range-diff ${r.plan.kind === 'rebase' ? `${short(r.plan.base)}..origin/${branch} ${short(r.plan.upstreamSha)}..HEAD` : ''}`,
+          `git range-diff ${r.plan.kind === 'rebase' ? `${quote(`${r.plan.base}..${r.plan.branchSha}`)} ${quote(`${r.plan.upstreamSha}..HEAD`)}` : ''}`,
           '# fix things, then:',
           `git push ${quote(`--force-with-lease=${branch}:${r.plan.branchSha}`)} origin ${quote(`HEAD:${branch}`)}`,
           `git push origin --delete ${quote(r.tempBranch)}`,

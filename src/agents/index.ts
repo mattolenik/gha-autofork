@@ -1,16 +1,16 @@
 import type { Inputs } from '../inputs.js';
 import type { Logger } from '../log.js';
-import { ClaudeBackend } from './claude.js';
-import { CodexBackend } from './codex.js';
+import { ClaudeBackend, CLAUDE_VERSION } from './claude.js';
+import { CodexBackend, CODEX_VERSION } from './codex.js';
 import { FakeBackend } from './fake.js';
 import type { AgentBackend } from './types.js';
 
 export function createBackend(name: Inputs['worker']['backend'], inputs: Inputs, log: Logger): AgentBackend {
   switch (name) {
     case 'claude':
-      return new ClaudeBackend({ log, sandbox: inputs.sandbox ?? false });
+      return new ClaudeBackend({ log, sandbox: inputs.sandbox ?? false, installVersion: inputs.claudeVersion ?? CLAUDE_VERSION });
     case 'codex':
-      return new CodexBackend({ log, sandbox: inputs.sandbox ?? false });
+      return new CodexBackend({ log, sandbox: inputs.sandbox ?? false, installVersion: inputs.codexVersion ?? CODEX_VERSION });
     case 'fake':
       return new FakeBackend(inputs.fakeScript);
   }

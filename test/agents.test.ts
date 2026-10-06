@@ -4,6 +4,8 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ClaudeBackend, parseClaudeOutput } from '../src/agents/claude.js';
 import { CodexBackend, parseCodexOutput } from '../src/agents/codex.js';
+import { createBackend } from '../src/agents/index.js';
+import type { Inputs } from '../src/inputs.js';
 import type { AgentRunOptions } from '../src/agents/types.js';
 import { buildChildEnv, forbiddenKeys } from '../src/env.js';
 import { silentLogger } from '../src/log.js';
@@ -66,6 +68,26 @@ describe('toJsonSchema', () => {
     const issues = (s.properties.issues as { items: { required: string[]; additionalProperties: boolean } }).items;
     expect(issues.additionalProperties).toBe(false);
     expect(issues.required).toContain('suggested_fix');
+  });
+});
+
+describe('configured CLI versions', () => {
+  it.each(['claude', 'codex'] as const)('accepts a configured preinstalled %s version without installing', async backend => {
+    const executable = path.join(tmp, backend);
+    await fs.writeFile(executable, `#!/bin/sh\n[ "$1" = --version ] || exit 99\nprintf '${backend} 9.8.7\\n'\n`, { mode: 0o755 });
+    const oldPath = process.env.PATH;
+    process.env.PATH = `${tmp}:${oldPath}`;
+    try {
+      const inputs = { claudeVersion: '9.8.7', codexVersion: '9.8.7', sandbox: false } as Inputs;
+      const cli = createBackend(backend, inputs, silentLogger);
+      await cli.ensureInstalled(false);
+      expect(cli.version).toContain('9.8.7');
+      const mismatch = createBackend(backend, { ...inputs, claudeVersion: '9.8.6', codexVersion: '9.8.6' }, silentLogger);
+      await expect(mismatch.ensureInstalled(false)).rejects.toThrow(/expected.*9\.8\.6/);
+    } finally {
+      if (oldPath === undefined) delete process.env.PATH;
+      else process.env.PATH = oldPath;
+    }
   });
 });
 

@@ -43,8 +43,8 @@ export interface GateOptions {
 export async function runGates(o: GateOptions): Promise<GateResult> {
   const { git, plan } = o;
   const failures: string[] = [];
-  const head = await git.revParse('HEAD');
   const candidate = await candidateIdentity(git);
+  const head = candidate.headSha;
 
   // REBASE_HEAD can linger after a rebase that ended with --skip, so check the state directories.
   for (const dir of ['rebase-merge', 'rebase-apply']) {
@@ -88,7 +88,8 @@ export async function runGates(o: GateOptions): Promise<GateResult> {
     })
   );
   if (comparison.code !== 0) failures.push(`range-diff failed: ${comparison.stderr.trim()}`);
-  const rangeDiff = count === 0 ? `No surviving patches. Original patches (all dropped):\n${comparison.stdout}` : comparison.stdout;
+  const rangeDiff = plan.patches.length === 0 ? 'Patchless fast-forward: no fork patches to replay or drop.'
+    : count === 0 ? `No surviving patches. Original patches (all dropped):\n${comparison.stdout}` : comparison.stdout;
 
   let verify: VerifyResult | null = null;
   if (o.verifyCommand && failures.length === 0) {

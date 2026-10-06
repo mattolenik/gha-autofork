@@ -19,6 +19,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - name: Check hosted-runner sandbox and provider DNS
+        run: npx tsx scripts/sandbox-smoke.ts
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
@@ -112,16 +114,30 @@ jobs:
           fake_script: ${{ github.workspace }}/test/e2e/contested.json
           install_clis: 'false'
 
+      - name: stage contested rescue branch
+        id: rescue
+        uses: ./
+        with:
+          phase: publish
+          upstream: ${{ runner.temp }}/e2e-bad/upstream.git
+          fork_remote_url: ${{ runner.temp }}/e2e-bad/origin.git
+          token: dummy
+          publish: auto
+          artifact_dir: ${{ steps.bad.outputs.artifact_dir }}
+          candidate_digest: ${{ steps.bad.outputs.artifact_digest }}
+
       - name: assert contested
         env:
           ORIGIN: ${{ runner.temp }}/e2e-bad/origin.git
           OUTCOME: ${{ steps.bad.outcome }}
           STATE: ${{ steps.bad.outputs.state }}
           RESULTS: ${{ steps.bad.outputs.results_dir }}
+          RESCUE: ${{ steps.rescue.outputs.temp_branch }}
         run: |
           set -eux
           test "$OUTCOME" = failure
           test "$STATE" = FAILED_CONTESTED
-          test -z "$(git --git-dir "$ORIGIN" for-each-ref 'refs/heads/autopatch/*')"
+          test -n "$RESCUE"
+          git --git-dir "$ORIGIN" rev-parse "refs/heads/$RESCUE"
           test -f "$RESULTS/recovery/history.bundle"
           git --git-dir "$ORIGIN" show main:src/lib.js | grep -q "HELLO '" # main untouched

@@ -138,12 +138,18 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
     for (const name of [branch, upstreamBranch]) await git.run(['check-ref-format', '--branch', name]);
     await git.run(['fetch', '--no-tags', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`]);
     log.info(`fetching upstream ${inputs.upstream} (${upstreamBranch})`);
-    await upstreamGit.run(['fetch', '--no-tags', '--prune', 'upstream', '+refs/heads/*:refs/remotes/upstream/*']);
+    await upstreamGit.run(['fetch', '--no-tags', 'upstream', `+refs/heads/${upstreamBranch}:refs/remotes/upstream/${upstreamBranch}`]);
 
     // 3. Plan
     const checkpointSha = await fetchCheckpoint(git, branch);
-    const planned = await computePlan(git, { branch, upstreamBranch, branchRev: `refs/remotes/origin/${branch}`, maxPatches: inputs.maxPatches,
+    let planned = await computePlan(git, { branch, upstreamBranch, branchRev: `refs/remotes/origin/${branch}`, maxPatches: inputs.maxPatches,
       checkpointSha, initialBase: inputs.initialBase });
+    // Explicit initialization is useful even when upstream has not moved yet.
+    if (planned.kind === 'nothing_to_do' && !checkpointSha && inputs.initialBase) {
+      const upstreamSha = await git.revParse(`refs/remotes/upstream/${upstreamBranch}`);
+      planned = { ...planned, kind: 'rebase', upstreamRef: `refs/remotes/upstream/${upstreamBranch}`, upstreamSha,
+        base: upstreamSha, expectedSurvivors: planned.patches.length, upstreamCommits: 0, workflowPaths: [] };
+    }
     report.plan = planned;
 
     if (planned.kind === 'nothing_to_do') {
@@ -154,7 +160,9 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
       patches: [], expectedSurvivors: 0, upstreamCommits: await git.revListCount(`${planned.branchSha}..${planned.upstreamSha}`), workflowPaths: [] };
     workPlan = plan;
     const independent = !!inputs.reviewer && (inputs.reviewer.backend !== inputs.worker.backend || inputs.worker.backend === 'fake');
-    const autoEligible = independent && !!inputs.verifyCommand && !!(checkpointSha || inputs.initialBase);
+    // Nothing to replay (no patches, or upstream has not moved): git alone produces the result and no agent judgement is involved.
+    const deterministic = plan.patches.length === 0 || plan.upstreamCommits === 0;
+    const autoEligible = (independent || deterministic) && !!inputs.verifyCommand && !!(checkpointSha || inputs.initialBase);
     if (!autoEligible) report.notes.push('automatic publishing requires independent review, verify_command, and an existing upstream checkpoint or explicit initial_base; candidate will be staged');
 
     log.info(`${plan.patches.length} patch(es) to rebase over ${plan.upstreamCommits} new upstream commit(s); ${plan.patches.filter((p) => p.absorbed).length} already upstream`);
@@ -165,6 +173,32 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
     // Agent-facing Git objects never carry transport credentials in their argv/environment.
     wt = await new Git(git.cwd).worktreeAdd(wtDir, planned.kind === 'fast_forward' ? plan.upstreamSha : plan.branchSha);
     await wt.run(['switch', '-q', '-C', report.tempBranch]);
+
+    const timeoutMs = inputs.agentTimeoutMinutes * 60_000;
+    const exportCandidate = async (outcome: RebaseOutcome, approval: 'approved' | 'contested') => {
+      report.artifactDir = path.join(resultsDir, 'candidate');
+      report.artifactDigest = await writeCandidate(wt!, report.artifactDir, plan, outcome, {
+        runId: env.runId, runAttempt: env.runAttempt, repository: inputs.repository, upstream: inputs.upstream,
+        checkpointSha: checkpointSha ?? null, kind: planned.kind === 'fast_forward' ? 'fast_forward' : 'rebase',
+        autoEligible: approval === 'approved' && autoEligible, verifyCommand: inputs.verifyCommand ?? null, approval,
+      });
+    };
+    if (deterministic) {
+      // Patchless: the result is upstream itself. No upstream movement: the result is the existing series, unchanged.
+      const outcome: RebaseOutcome = plan.patches.length === 0
+        ? { headSha: plan.upstreamSha, records: [], conflictsResolved: 0, mapping: new Map() }
+        : { headSha: plan.branchSha, conflictsResolved: 0, mapping: new Map(plan.patches.map((p) => [p.sha, p.sha])),
+            records: plan.patches.map((p) => ({ sha: p.sha, subject: p.subject, result: 'applied', newSha: p.sha, conflicts: [], report: null, extraPaths: [] })) };
+      const what = plan.patches.length === 0 ? 'patchless' : 'unchanged';
+      report.outcome = outcome;
+      report.headSha = outcome.headSha;
+      report.gates = await runGates({ git: wt, plan, expectedCount: outcome.mapping.size, verifyCommand: inputs.verifyCommand,
+        verifyTimeoutMs: timeoutMs, env: buildChildEnv(), log, sandbox: inputs.sandbox ?? false });
+      if (!report.gates.ok) return await fail('FAILED_GATE', `${what} candidate failed verification`, report.gates.failures);
+      await assertCandidate(wt, report.gates.candidate);
+      await exportCandidate(outcome, 'approved');
+      return await finish('PREPARED', `${what} candidate passed deterministic gates; no agents needed`);
+    }
 
     // 5. Agents
     const makeBackend = deps.createBackend ?? ((name: Inputs['worker']['backend']) => createBackend(name, inputs, log));
@@ -177,7 +211,6 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
     };
     checkCapabilities(workerBackend);
     await workerBackend.ensureInstalled(inputs.installClis);
-    const timeoutMs = inputs.agentTimeoutMinutes * 60_000;
     const runnerOpts = { budget, maxTurns: inputs.maxTurns, timeoutMs, transcriptsDir: path.join(resultsDir, 'transcripts'), log };
     const worker = new AgentRunner({ ...runnerOpts, backend: workerBackend, model: inputs.worker.model, role: 'worker', env: buildChildEnv(backendEnv(inputs.worker.backend, inputs)) });
     let reviewer: AgentRunner | null = null;
@@ -204,14 +237,13 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
     const onProgress = async (records: PatchRecord[], active: string | null) => {
       progress = records;
       currentPatch = active;
-      report.recoveryDir = path.join(resultsDir, 'recovery');
-      await saveRecovery(wt!, plan, report.recoveryDir, records, active);
+      if (active !== null) {
+        report.recoveryDir = path.join(resultsDir, 'recovery');
+        await saveRecovery(wt!, plan, report.recoveryDir, records, active);
+      }
       await fs.writeFile(path.join(resultsDir, 'progress.json'), JSON.stringify({ plan, records, currentPatch: active }, null, 2));
     };
-    await onProgress([], null);
-    const outcome: RebaseOutcome = planned.kind === 'fast_forward'
-      ? { headSha: plan.upstreamSha, records: [], conflictsResolved: 0, mapping: new Map() }
-      : await log.group('rebase', () => runRebase({ git: wt!, plan, worker: makeWorker(worker, plan, wtDir), holdDir, log, onProgress }));
+    const outcome = await log.group('rebase', () => runRebase({ git: wt!, plan, worker: makeWorker(worker, plan, wtDir), holdDir, log, onProgress }));
     report.outcome = outcome;
     report.headSha = outcome.headSha;
 
@@ -227,12 +259,19 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
         log,
         sandbox: inputs.sandbox ?? false,
       });
+    let reviewHead = outcome.headSha;
     const consensus = await log.group('review', () =>
-      runConsensus({ git: wt!, plan, outcome, worker, reviewer, maxRounds: inputs.maxRounds, runGates: gatesFn, holdDir, log,
+      runConsensus({ git: wt!, plan, outcome, worker, reviewer, maxRounds: inputs.maxRounds, runGates: gatesFn, log,
         onProgress: async (rounds, gates) => {
           report.gates = gates;
           await fs.writeFile(path.join(resultsDir, 'review-progress.json'), JSON.stringify({ rounds, gates }, null, 2));
-          await onProgress(outcome.records, null);
+          progress = outcome.records;
+          currentPatch = null;
+          if (outcome.headSha !== reviewHead) {
+            report.recoveryDir = path.join(resultsDir, 'recovery');
+            await saveRecovery(wt!, plan, report.recoveryDir, progress, null);
+            reviewHead = outcome.headSha;
+          }
         } }),
     );
     report.consensus = consensus;
@@ -241,16 +280,16 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
     report.notes.push(...consensus.notes);
 
     if (consensus.state !== 'APPROVED') {
+      if (consensus.state === 'CONTESTED' && consensus.gates.ok) {
+        await assertCandidate(wt, consensus.gates.candidate);
+        await exportCandidate(outcome, 'contested');
+      }
       return await fail(consensus.state === 'CONTESTED' ? 'FAILED_CONTESTED' : 'FAILED_GATE', consensus.reason, consensus.gates.failures);
     }
 
     // 8. Export an immutable candidate. This process never publishes refs or issues.
     await assertCandidate(wt, consensus.gates.candidate);
-    report.artifactDir = path.join(resultsDir, 'candidate');
-    report.artifactDigest = await writeCandidate(wt, report.artifactDir, plan, outcome, {
-      runId: env.runId, runAttempt: env.runAttempt, repository: inputs.repository, upstream: inputs.upstream,
-      checkpointSha: checkpointSha ?? null, kind: planned.kind, autoEligible, verifyCommand: inputs.verifyCommand ?? null,
-    });
+    await exportCandidate(outcome, 'approved');
     return await finish('PREPARED', `${consensus.reason}; immutable candidate exported for isolated verification`);
   } catch (err) {
     if (err instanceof AutopatchError) return await fail(err.state, err.message, err.details);

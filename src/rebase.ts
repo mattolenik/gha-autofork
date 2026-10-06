@@ -45,7 +45,7 @@ export interface Worker {
   resolve(ctx: ConflictContext): Promise<ResolveReport>;
 }
 
-export type PatchResult = 'applied' | 'absorbed' | 'became_empty' | 'skipped' | 'rerere';
+export type PatchResult = 'applied' | 'absorbed' | 'became_empty' | 'skipped';
 
 export interface PatchRecord {
   sha: string;
@@ -87,7 +87,7 @@ export const REBASE_CONFIG: Record<string, string> = {
   'rebase.autoStash': 'false',
   'rebase.missingCommitsCheck': 'ignore',
   'merge.conflictStyle': 'zdiff3',
-  'rerere.enabled': 'true',
+  'rerere.enabled': 'false',
   'rerere.autoUpdate': 'false',
   'core.editor': 'true',
   'sequence.editor': 'true',
@@ -192,8 +192,8 @@ export async function runRebase(o: RebaseOptions): Promise<RebaseOutcome> {
     if (unmerged.size === 0) {
       if (await git.indexIsEmpty()) {
         log.info(`patch ${index}/${total} "${patch.subject}" became empty on the new base; skipping`);
-      record(patch, { result: 'became_empty' });
-      await o.onProgress?.([...records.values()], patch.sha);
+        record(patch, { result: 'became_empty' });
+        await o.onProgress?.([...records.values()], patch.sha);
         r = await git.run(['rebase', '--skip'], { allowFailure: true });
         continue;
       }
@@ -277,7 +277,7 @@ export async function runRebase(o: RebaseOptions): Promise<RebaseOutcome> {
   const headSha = await git.revParse('HEAD');
   const survivors = plan.patches.filter((p) => {
     const rec = records.get(p.sha);
-    return !rec || rec.result === 'applied' || rec.result === 'rerere';
+    return !rec || rec.result === 'applied';
   });
   const newShas = await git.lines(['rev-list', '--reverse', `${plan.upstreamSha}..${headSha}`]);
   if (newShas.length !== survivors.length) {
