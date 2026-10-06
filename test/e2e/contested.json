@@ -1,0 +1,19 @@
+{
+  "resolve": {
+    "fork: greet shouts": {
+      "files": {
+        "src/lib.js": "export function greet(name) {\n  return 'HELLO, ' + name.toUpperCase() + '!';\n}\n"
+      }
+    }
+  },
+  "review": [
+    {
+      "verdict": "reject",
+      "summary": "the exclamation mark changes the greeting semantics",
+      "issues": [{ "id": "I1", "severity": "blocker", "patch": null, "file": "src/lib.js", "description": "keep the bang out", "suggested_fix": null }]
+    }
+  ],
+  "respond": [
+    { "verdict": "approve", "responses": [{ "issue_id": "I1", "action": "rebutted", "explanation": "upstream added it on purpose", "target_patch": null }], "files_changed": [] }
+  ]
+}

@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"t1"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"i1","type":"reasoning","text":"thinking"}}
+{"type":"item.completed","item":{"id":"i2","type":"command_execution","command":"git diff","exit_code":0}}
+{"type":"item.completed","item":{"id":"i3","type":"agent_message","text":"{\"verdict\":\"approve\",\"summary\":\"fine\",\"issues\":[],\"skips_approved\":[],\"checked\":{\"range_diff\":true,\"verify_log\":true,\"commands_run\":[\"git diff\"]}}"}}
+{"type":"turn.completed","usage":{"input_tokens":1200,"cached_input_tokens":0,"output_tokens":300}}

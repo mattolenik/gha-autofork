@@ -1,0 +1,7 @@
+#!/bin/sh
+# Stub Claude Code CLI: records argv, env and stdin, then prints a canned JSON result.
+out="${STUB_OUT:?}"
+printf '%s\n' "$@" > "$out/argv"
+env | sort > "$out/env"
+cat > "$out/stdin"
+cat "${STUB_RESPONSE:?}"

@@ -1,0 +1,14 @@
+#!/bin/sh
+# Stub Codex CLI: records argv, env and stdin, writes the last-message file, prints canned JSONL.
+out="${STUB_OUT:?}"
+printf '%s\n' "$@" > "$out/argv"
+env | sort > "$out/env"
+cat > "$out/stdin"
+last=""
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "--output-last-message" ]; then last="$a"; fi
+  prev="$a"
+done
+cp "${STUB_LAST:?}" "$last"
+cat "${STUB_RESPONSE:?}"

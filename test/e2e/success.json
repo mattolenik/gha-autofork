@@ -1,0 +1,11 @@
+{
+  "resolve": {
+    "fork: greet shouts": {
+      "files": {
+        "src/lib.js": "export function greet(name) {\n  return 'HELLO, ' + name.toUpperCase() + '!';\n}\n"
+      },
+      "hook": "test ! -e CLAUDE.md"
+    }
+  },
+  "costUsd": 0.01
+}

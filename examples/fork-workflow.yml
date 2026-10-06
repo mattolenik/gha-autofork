@@ -1,0 +1,66 @@
+# Drop this file into your fork as .github/workflows/autopatch.yml and commit it as one of your patches.
+#
+# Secrets to add in the fork's settings:
+#   AUTOPATCH_TOKEN   fine-grained PAT (or GitHub App token) with Contents, Workflows and Issues read/write
+#                     on this repository. The default GITHUB_TOKEN cannot push workflow files and its
+#                     pushes do not trigger your other workflows.
+#   ANTHROPIC_API_KEY for the claude backend
+#   OPENAI_API_KEY    for the codex backend
+#
+# If the repository has a ruleset or branch protection that blocks force pushes, add the token owner
+# as a bypass actor. Forks have Actions disabled by default; enable them once in the Actions tab.
+name: autopatch
+
+on:
+  schedule:
+    - cron: '17 6 * * 1' # weekly, Monday 06:17 UTC (avoid :00, GitHub is busiest then)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Do everything except push
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: autopatch-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  autopatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      # Optional but recommended: restrict outbound network to the hosts the agents need.
+      # - uses: step-security/harden-runner@v2
+      #   with:
+      #     egress-policy: block
+      #     allowed-endpoints: >
+      #       github.com:443 api.github.com:443 objects.githubusercontent.com:443
+      #       api.anthropic.com:443 claude.ai:443 api.openai.com:443 registry.npmjs.org:443
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false # never leave the token in .git/config where agents could read it
+
+      - id: autopatch
+        uses: mattolenik/gha-autopatch@v1
+        with:
+          upstream: OWNER/REPO # the project you forked
+          token: ${{ secrets.AUTOPATCH_TOKEN }}
+          worker: claude:claude-opus-5-5
+          reviewer: codex:gpt-6.1-sol
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          # verify_command: npm ci && npm test
+          max_cost_usd: '10'
+          dry_run: ${{ inputs.dry_run || false }}
+
+      - if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: autopatch-results
+          path: ${{ steps.autopatch.outputs.results_dir }}
+          if-no-files-found: ignore

@@ -1,0 +1,107 @@
+name: autopatch
+description: >-
+  Rebase a personal fork's default branch onto upstream with AI agents resolving conflicts and a
+  second agent from another provider reviewing until both agree. Force-pushes with backup refs.
+author: Matt Olenik
+branding:
+  icon: git-branch
+  color: purple
+
+inputs:
+  upstream:
+    description: Upstream repository as owner/repo or a full URL.
+    required: true
+  upstream_branch:
+    description: Upstream branch to rebase onto. Defaults to upstream's default branch.
+    required: false
+  branch:
+    description: Fork branch to maintain. Defaults to the fork's default branch.
+    required: false
+  repository:
+    description: Fork repository as owner/repo. Defaults to the repository running the workflow.
+    required: false
+    default: ${{ github.repository }}
+  token:
+    description: >-
+      Fine-grained PAT or GitHub App token with Contents write, Workflows write, and Issues write.
+      The default GITHUB_TOKEN cannot push workflow files and will not trigger downstream workflows.
+    required: true
+  worker:
+    description: Worker agent as backend:model, e.g. claude:claude-opus-5-5 or codex:gpt-6.1-sol.
+    required: true
+  reviewer:
+    description: Reviewer agent as backend:model. Use a different provider. Empty disables review.
+    required: false
+    default: ''
+  max_rounds:
+    description: Maximum consensus rounds before the result is treated as contested.
+    required: false
+    default: '3'
+  verify_command:
+    description: Shell command run by the orchestrator after the rebase and after every review fix.
+    required: false
+    default: ''
+  max_patches:
+    description: Fail if the fork carries more than this many patches over upstream.
+    required: false
+    default: '200'
+  max_cost_usd:
+    description: Abort when the summed reported agent cost exceeds this amount.
+    required: false
+    default: '10'
+  max_turns:
+    description: Maximum agent turns per invocation.
+    required: false
+    default: '60'
+  agent_timeout_minutes:
+    description: Wall-clock limit per agent invocation.
+    required: false
+    default: '30'
+  keep_backups:
+    description: Number of refs/autopatch/backup entries to keep.
+    required: false
+    default: '10'
+  publish:
+    description: auto force-pushes after approval; stage leaves the temporary branch for manual promotion.
+    required: false
+    default: auto
+  install_clis:
+    description: Install missing agent CLIs on the runner.
+    required: false
+    default: 'true'
+  dry_run:
+    description: Do everything except push.
+    required: false
+    default: 'false'
+  anthropic_api_key:
+    description: API key for the claude backend.
+    required: false
+    default: ''
+  openai_api_key:
+    description: API key for the codex backend.
+    required: false
+    default: ''
+  fork_remote_url:
+    description: Test-only override of the fork remote URL.
+    required: false
+    default: ''
+  fake_script:
+    description: Test-only path to a fake backend script.
+    required: false
+    default: ''
+
+outputs:
+  state:
+    description: Final state, one of APPROVED, NOTHING_TO_DO, FAST_FORWARDED, or a FAILED_* value.
+  branch_sha:
+    description: SHA the branch points at after the run.
+  backup_ref:
+    description: Backup ref created before the force-push, if any.
+  temp_branch:
+    description: Temporary branch name, kept on failure.
+  results_dir:
+    description: Directory containing results.json, transcripts, and range-diff output.
+
+runs:
+  using: node24
+  main: dist/index.js

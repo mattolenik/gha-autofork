@@ -1,0 +1,96 @@
+# Reusable workflow: call it from a fork with `uses: mattolenik/gha-autopatch/.github/workflows/autopatch.yml@v1`.
+# Most forks can use examples/fork-workflow.yml instead, which calls the action directly.
+name: autopatch
+
+on:
+  workflow_call:
+    inputs:
+      upstream:
+        description: Upstream repository as owner/repo
+        required: true
+        type: string
+      upstream_branch:
+        required: false
+        type: string
+        default: ''
+      branch:
+        required: false
+        type: string
+        default: ''
+      worker:
+        description: backend:model for the agent that resolves conflicts
+        required: true
+        type: string
+      reviewer:
+        description: backend:model for the independent reviewer (use a different provider)
+        required: false
+        type: string
+        default: ''
+      verify_command:
+        required: false
+        type: string
+        default: ''
+      max_rounds:
+        required: false
+        type: string
+        default: '3'
+      max_cost_usd:
+        required: false
+        type: string
+        default: '10'
+      publish:
+        required: false
+        type: string
+        default: auto
+      dry_run:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      token:
+        description: PAT or GitHub App token with Contents, Workflows and Issues write
+        required: true
+      anthropic_api_key:
+        required: false
+      openai_api_key:
+        required: false
+
+permissions: {}
+
+concurrency:
+  group: autopatch-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  autopatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: autopatch
+        uses: mattolenik/gha-autopatch@v1
+        with:
+          upstream: ${{ inputs.upstream }}
+          upstream_branch: ${{ inputs.upstream_branch }}
+          branch: ${{ inputs.branch }}
+          token: ${{ secrets.token }}
+          worker: ${{ inputs.worker }}
+          reviewer: ${{ inputs.reviewer }}
+          verify_command: ${{ inputs.verify_command }}
+          max_rounds: ${{ inputs.max_rounds }}
+          max_cost_usd: ${{ inputs.max_cost_usd }}
+          publish: ${{ inputs.publish }}
+          dry_run: ${{ inputs.dry_run }}
+          anthropic_api_key: ${{ secrets.anthropic_api_key }}
+          openai_api_key: ${{ secrets.openai_api_key }}
+
+      - if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: autopatch-results
+          path: ${{ steps.autopatch.outputs.results_dir || format('{0}/autopatch/results', runner.temp) }}
+          if-no-files-found: ignore

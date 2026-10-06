@@ -1,0 +1,95 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: dist is up to date
+        run: git diff --exit-code -- dist
+
+  e2e-fake:
+    # Runs the bundled action end to end against local bare repositories with scripted agents.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: git --version
+      - name: build fixtures
+        run: |
+          scripts/e2e-fixture.sh "$RUNNER_TEMP/e2e-ok"
+          scripts/e2e-fixture.sh "$RUNNER_TEMP/e2e-bad"
+
+      - name: successful rebase
+        id: ok
+        uses: ./
+        with:
+          upstream: ${{ runner.temp }}/e2e-ok/upstream.git
+          fork_remote_url: ${{ runner.temp }}/e2e-ok/origin.git
+          repository: ${{ github.repository }}
+          token: dummy
+          worker: fake
+          reviewer: fake
+          fake_script: ${{ github.workspace }}/test/e2e/success.json
+          verify_command: grep -q 'HELLO, ' src/lib.js && test -f CLAUDE.md
+          install_clis: 'false'
+
+      - name: assert success
+        env:
+          ORIGIN: ${{ runner.temp }}/e2e-ok/origin.git
+          STATE: ${{ steps.ok.outputs.state }}
+          SHA: ${{ steps.ok.outputs.branch_sha }}
+          BACKUP: ${{ steps.ok.outputs.backup_ref }}
+        run: |
+          set -eux
+          test "$STATE" = APPROVED
+          test "$(git --git-dir "$ORIGIN" rev-parse main)" = "$SHA"
+          git --git-dir "$ORIGIN" rev-parse --verify "$BACKUP"
+          test -z "$(git --git-dir "$ORIGIN" for-each-ref 'refs/heads/autopatch/*')"
+          test "$(git --git-dir "$ORIGIN" rev-list --count "$(git --git-dir "$ORIGIN" rev-parse main~2)..main")" = 2
+          git --git-dir "$ORIGIN" show main:src/lib.js | grep -q "HELLO, "
+          test -f "${{ steps.ok.outputs.results_dir }}/results.json"
+
+      - name: contested rebase
+        id: bad
+        continue-on-error: true
+        uses: ./
+        with:
+          upstream: ${{ runner.temp }}/e2e-bad/upstream.git
+          fork_remote_url: ${{ runner.temp }}/e2e-bad/origin.git
+          repository: ${{ github.repository }}
+          token: dummy
+          worker: fake
+          reviewer: fake
+          fake_script: ${{ github.workspace }}/test/e2e/contested.json
+          install_clis: 'false'
+
+      - name: assert contested
+        env:
+          ORIGIN: ${{ runner.temp }}/e2e-bad/origin.git
+          OUTCOME: ${{ steps.bad.outcome }}
+          STATE: ${{ steps.bad.outputs.state }}
+          TEMP: ${{ steps.bad.outputs.temp_branch }}
+          SHA: ${{ steps.bad.outputs.branch_sha }}
+        run: |
+          set -eux
+          test "$OUTCOME" = failure
+          test "$STATE" = FAILED_CONTESTED
+          test -n "$TEMP"
+          test "$(git --git-dir "$ORIGIN" rev-parse "refs/heads/$TEMP")" = "$SHA"
+          git --git-dir "$ORIGIN" show main:src/lib.js | grep -q "HELLO '" # main untouched
