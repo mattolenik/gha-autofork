@@ -5,12 +5,16 @@ import { buildChildEnv } from '../env.js';
 import type { Logger } from '../log.js';
 import { spawnCollect, which } from './process.js';
 import type { AgentBackend, AgentRunOptions, AgentRunResult } from './types.js';
+import { sandboxCommand } from '../sandbox.js';
+
+export const CODEX_VERSION = '0.160.0';
 
 export interface CodexBackendOptions {
   bin?: string;
-  /** npm version spec for installation; default "latest". */
+  /** Exact tested version; defaults to CODEX_VERSION. */
   installVersion?: string;
   log: Logger;
+  sandbox?: boolean;
 }
 
 /**
@@ -20,6 +24,8 @@ export interface CodexBackendOptions {
  */
 export class CodexBackend implements AgentBackend {
   readonly name = 'codex';
+  readonly capabilities = { turnLimit: false, budgetLimit: false, costReporting: false };
+  version: string | undefined;
   private readonly bin: string;
 
   constructor(private readonly o: CodexBackendOptions) {
@@ -28,9 +34,9 @@ export class CodexBackend implements AgentBackend {
 
   async ensureInstalled(install: boolean): Promise<void> {
     const env = buildChildEnv();
-    if (await which(this.bin, env)) return;
+    if (await which(this.bin, env)) { await this.checkVersion(env); return; }
     if (!install) throw new Error(`"${this.bin}" is not on PATH and install_clis is false`);
-    const spec = `@openai/codex@${this.o.installVersion ?? 'latest'}`;
+    const spec = `@openai/codex@${this.o.installVersion ?? CODEX_VERSION}`;
     this.o.log.info(`installing ${spec}`);
     const r = await spawnCollect('npm', ['install', '-g', '--no-fund', '--no-audit', spec], {
       cwd: os.tmpdir(),
@@ -40,6 +46,14 @@ export class CodexBackend implements AgentBackend {
     });
     if (r.code !== 0) throw new Error(`codex install failed: ${r.stderr.trim() || r.stdout.trim()}`);
     if (!(await which(this.bin, env))) throw new Error('codex installed but not found on PATH');
+    await this.checkVersion(env);
+  }
+
+  private async checkVersion(env: Record<string, string>): Promise<void> {
+    const result = await spawnCollect(this.bin, ['--version'], { cwd: os.tmpdir(), env, timeoutMs: 10_000, backendName: this.name });
+    this.version = result.stdout.trim();
+    const expected = this.o.installVersion ?? CODEX_VERSION;
+    if (result.code !== 0 || this.version.match(/\d+\.\d+\.\d+/)?.[0] !== expected) throw new Error(`expected Codex ${expected}, found ${this.version}`);
   }
 
   buildArgs(opts: AgentRunOptions, schemaFile: string, lastMessageFile: string): string[] {
@@ -85,9 +99,11 @@ export class CodexBackend implements AgentBackend {
       const env = { ...opts.env, CODEX_API_KEY: apiKey, OPENAI_API_KEY: apiKey, CODEX_HOME: codexHome };
       // codex exec has no system-prompt flag (model_instructions is not a recognized key in 0.160), so the
       // instructions travel at the top of the prompt. AGENTS.md discovery is disabled, so they are the only ones.
-      const r = await spawnCollect(this.bin, this.buildArgs(opts, schemaFile, lastMessageFile), {
+      const args = this.buildArgs(opts, schemaFile, lastMessageFile);
+      const launch = this.o.sandbox ? await sandboxCommand(this.bin, args, opts.cwd, opts.mode, env, [tmp]) : { bin: this.bin, args, env };
+      const r = await spawnCollect(launch.bin, launch.args, {
         cwd: opts.cwd,
-        env,
+        env: launch.env,
         stdin: composePrompt(opts.systemPrompt, prompt),
         timeoutMs: opts.timeoutMs,
         backendName: this.name,
@@ -128,7 +144,7 @@ export function parseCodexOutput(stdout: string, stderr: string, code: number, l
     }
     if (ev.type === 'item.completed' && ev.item?.type === 'agent_message') {
       turns += 1;
-      if (!text && ev.item.text) text = ev.item.text.trim();
+      if (!lastMessage.trim() && ev.item.text) text = ev.item.text.trim();
     }
     if (ev.type === 'error' || ev.type === 'turn.failed') sawError = true;
   }

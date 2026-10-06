@@ -1,0 +1,56 @@
+name: opt-in integration
+on:
+  workflow_dispatch:
+    inputs:
+      live_models:
+        description: Make a small billed call to each pinned CLI
+        type: boolean
+        default: false
+      claude_model:
+        type: string
+        default: claude-opus-5-5
+      codex_model:
+        type: string
+        default: gpt-6.1-sol
+      smoke_repository:
+        description: Optional initialized disposable repo named owner/autopatch-smoke-<name>
+        type: string
+        default: ''
+permissions:
+  contents: read
+jobs:
+  cli:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - run: npx tsx scripts/cli-smoke.ts
+        env:
+          LIVE_MODELS: ${{ inputs.live_models }}
+          CLAUDE_MODEL: ${{ inputs.claude_model }}
+          CODEX_MODEL: ${{ inputs.codex_model }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  github:
+    if: inputs.smoke_repository != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npx tsx scripts/github-smoke.ts
+        env:
+          SMOKE_REPOSITORY: ${{ inputs.smoke_repository }}
+          SMOKE_TOKEN: ${{ secrets.AUTOPATCH_SMOKE_TOKEN }}

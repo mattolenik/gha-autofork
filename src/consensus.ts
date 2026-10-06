@@ -1,11 +1,11 @@
 import type { AgentRunner } from './agents/runner.js';
 import { AutopatchError } from './errors.js';
-import { foldChanges } from './fixup.js';
+import { foldChanges, resolvePatchRef } from './fixup.js';
 import type { GateResult } from './gates.js';
 import type { Git } from './git.js';
 import type { Logger } from './log.js';
 import type { RebasePlan } from './plan.js';
-import { quarantine } from './quarantine.js';
+import { assertCandidate, guardGit, validateFilePath } from './state.js';
 import type { RebaseOutcome } from './rebase.js';
 import {
   respondSystemPrompt,
@@ -43,6 +43,7 @@ export interface ConsensusOptions {
   holdDir: string;
   log: Logger;
   caps?: { diff?: number };
+  onProgress?: (rounds: RoundHistory[], gates: GateResult) => Promise<void>;
 }
 
 type Issue = ReviewVerdict['issues'][number];
@@ -79,25 +80,12 @@ export async function runConsensus(o: ConsensusOptions): Promise<ConsensusResult
     };
   };
 
-  const readOnlyCall = async <T>(fn: () => Promise<T>): Promise<T> => {
-    const q = await quarantine(git.cwd, o.holdDir);
-    try {
-      return await fn();
-    } finally {
-      await q.restore();
-      const dirty = await git.statusPorcelain();
-      if (dirty.length > 0) {
-        notes.push(`a read-only agent call left the worktree dirty (${dirty.length} path(s)); reset`);
-        log.warning(notes[notes.length - 1] as string);
-        await git.run(['checkout', '-q', '--', '.']);
-        await git.run(['clean', '-fdq']);
-      }
-    }
-  };
+  const readOnlyCall = <T>(fn: () => Promise<T>): Promise<T> => guardGit(git, 'readonly', 'read-only agent', fn);
 
   for (let round = 1; round <= o.maxRounds; round++) {
     const entry: RoundHistory = { round, selfCheck: null, verdict: null, syntheticIssues: [], response: null, foldWarnings: [] };
     history.push(entry);
+    await o.onProgress?.(history, gates);
     let issues: Issue[] = [];
 
     if (!gates.ok) {
@@ -123,15 +111,26 @@ export async function runConsensus(o: ConsensusOptions): Promise<ConsensusResult
         const verdict = await readOnlyCall(() =>
           o.reviewer!.structured({ schemaName: 'review', system: reviewSystemPrompt(), user: reviewUserPrompt(rctx), cwd: git.cwd, mode: 'readonly' }),
         );
-        if (verdict.verdict === 'reject' && blocking(verdict.issues).length === 0) {
+        if (verdict.verdict === 'reject' && verdict.issues.length > 0 && blocking(verdict.issues).length === 0) {
           notes.push(`round ${round}: reviewer rejected with only minor issues; treated as approval`);
           verdict.verdict = 'approve';
         }
         entry.verdict = verdict;
         log.info(`round ${round}: reviewer ${verdict.verdict} — ${verdict.summary}`);
         issues = blocking(verdict.issues);
+        if (!verdict.checked.range_diff || (gates.verify && !verdict.checked.verify_log)) {
+          entry.syntheticIssues.push({ id: 'review-checks', severity: 'blocker', patch: null, file: null,
+            description: 'reviewer did not check the patch comparison and configured verification log', suggested_fix: null });
+        }
+        const decisions = new Map<string, ReviewVerdict['skips_approved'][number]>();
+        const skippedMapping = new Map(skipped.map(r => [r.sha, r.sha]));
+        for (const decision of verdict.skips_approved) {
+          const sha = resolvePatchRef(decision.patch, skippedMapping);
+          if (!sha || decisions.has(sha)) throw new AutopatchError('FAILED_AGENT', `invalid, ambiguous, or duplicate skip approval: ${JSON.stringify(decision.patch)}`);
+          decisions.set(sha, decision);
+        }
         for (const rec of skipped) {
-          const decision = verdict.skips_approved.find((s) => rec.sha.startsWith(s.patch.trim().toLowerCase()) || s.patch.trim().toLowerCase().startsWith(rec.sha.slice(0, 7)));
+          const decision = decisions.get(rec.sha);
           if (!decision || !decision.approved) {
             entry.syntheticIssues.push({
               id: `skip-${rec.sha.slice(0, 7)}`,
@@ -148,9 +147,11 @@ export async function runConsensus(o: ConsensusOptions): Promise<ConsensusResult
         issues = [...issues, ...entry.syntheticIssues];
       }
 
-      const selfOk = entry.selfCheck.complete;
-      const reviewOk = !o.reviewer || (entry.verdict?.verdict === 'approve' && entry.syntheticIssues.length === 0);
+      const selfOk = entry.selfCheck.complete && entry.selfCheck.concerns.length === 0;
+      const reviewOk = !o.reviewer || (entry.verdict?.verdict === 'approve' && issues.length === 0);
       if (selfOk && reviewOk) {
+        await assertCandidate(git, gates.candidate);
+        await o.onProgress?.(history, gates);
         const reason = o.reviewer ? `worker and reviewer agreed in round ${round}` : `worker self-check passed in round ${round} (no reviewer configured)`;
         log.info(reason);
         return { state: 'APPROVED', rounds: history, gates, headSha: await git.revParse('HEAD'), notes, reason };
@@ -165,51 +166,44 @@ export async function runConsensus(o: ConsensusOptions): Promise<ConsensusResult
       }
     }
 
+    if (issues.length === 0) issues.push({ id: 'review-rejected', severity: 'major', patch: null, file: null,
+      description: entry.verdict?.summary ?? 'review has not approved this candidate', suggested_fix: null });
     const ids = issues.map((i) => i.id).sort().join(',');
-    if (previousIssueIds !== null && ids === previousIssueIds && !previousChangedFiles) {
+    const signature = JSON.stringify(issues.map(i => [i.severity, i.patch, i.file, i.description.replace(/\s+/g, ' ').trim()]).sort());
+    if (previousIssueIds !== null && signature === previousIssueIds && !previousChangedFiles) {
       const reason = `no progress: the same issues (${ids}) remain after a round with no file changes`;
       log.warning(reason);
       return { state: gates.ok ? 'CONTESTED' : 'GATE_FAILED', rounds: history, gates, headSha: await git.revParse('HEAD'), notes, reason };
     }
-    previousIssueIds = ids;
+    previousIssueIds = signature;
 
     if (round === o.maxRounds) break;
 
     const ctx = await context(entry.selfCheck);
-    const q = await quarantine(git.cwd, o.holdDir);
-    const headBefore = await git.revParse('HEAD');
-    let response;
-    try {
-      response = await o.worker.structured({
+    const response = await guardGit(git, 'edit', 'review worker', () => o.worker.structured({
         schemaName: 'respond',
         system: respondSystemPrompt(),
         user: respondUserPrompt(ctx, issues),
         cwd: git.cwd,
         mode: 'edit',
         meta: { round: String(round), issueIds: ids },
-      });
-    } finally {
-      await q.restore();
-    }
-    if ((await git.revParse('HEAD')) !== headBefore || (await git.tryRevParse('REBASE_HEAD')) !== undefined && (await git.run(['rev-parse', '--git-path', 'rebase-merge'])).stdout.trim() === '') {
-      throw new AutopatchError('FAILED_TAMPERED', 'worker changed git history while responding to review (it must only edit files)');
-    }
+      }));
     entry.response = response;
     log.info(`round ${round}: worker responded (${response.verdict}) — ${response.summary}; ${response.files_changed.length} file(s) changed`);
 
     const dirty = await git.statusPorcelain();
     const changedSet = new Set(response.files_changed);
+    for (const file of changedSet) await validateFilePath(git.cwd, file);
     const unreported = dirty.map((l) => l.slice(3)).filter((p) => !changedSet.has(p));
     if (unreported.length > 0) {
-      notes.push(`round ${round}: worker changed unreported files, discarded: ${unreported.join(', ')}`);
-      log.warning(notes[notes.length - 1] as string);
-      await git.run(['checkout', '-q', '--', ...unreported], { allowFailure: true });
-      await git.run(['clean', '-fdq', '--', ...unreported], { allowFailure: true });
+      throw new AutopatchError('FAILED_TAMPERED', 'review worker changed unreported files', unreported);
     }
 
     previousChangedFiles = false;
     if (response.files_changed.length > 0) {
       const targets = new Set(response.responses.map((r) => r.target_patch).filter((t): t is string => !!t));
+      for (const target of targets) if (!resolvePatchRef(target, outcome.mapping)) throw new AutopatchError('FAILED_AGENT', `invalid fixup target: ${target}`);
+      if (targets.size > 1) throw new AutopatchError('FAILED_AGENT', 'review fixes must target one patch per round; split multi-patch fixes across rounds');
       const fold = await foldChanges({
         git,
         plan,
@@ -227,6 +221,7 @@ export async function runConsensus(o: ConsensusOptions): Promise<ConsensusResult
       previousChangedFiles = fold.folded.length > 0;
       gates = await o.runGates();
     }
+    await o.onProgress?.(history, gates);
   }
 
   const reason = gates.ok

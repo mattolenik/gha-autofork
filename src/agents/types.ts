@@ -37,6 +37,8 @@ export interface AgentRunResult {
 
 export interface AgentBackend {
   readonly name: string;
+  readonly capabilities?: { turnLimit: boolean; budgetLimit: boolean; costReporting: boolean };
+  version?: string | undefined;
   /** Make sure the CLI is available; may install it. */
   ensureInstalled(install: boolean): Promise<void>;
   run(prompt: string, opts: AgentRunOptions): Promise<AgentRunResult>;

@@ -84,12 +84,22 @@ export const inputsSchema = z.object({
   openaiApiKey: optionalString,
   forkRemoteUrl: optionalString,
   fakeScript: optionalString,
+  phase: z.enum(['prepare', 'verify', 'publish', 'report']).optional(),
+  artifactDir: optionalString.optional(),
+  candidateDigest: optionalString.optional(),
+  verificationDir: optionalString.optional(),
+  verificationDigest: optionalString.optional(),
+  upstreamToken: optionalString.optional(),
+  initialBase: optionalString.optional(),
+  sandbox: boolString.optional(),
+  requireHardLimits: boolString.optional(),
+  resultsDigest: optionalString.optional(),
 });
 
 export type Inputs = z.infer<typeof inputsSchema>;
 
 /** Raw string map, keyed by the camelCase names above. Exposed for tests. */
-export type RawInputs = { [K in keyof Inputs]-?: string };
+export type RawInputs = { [K in keyof Inputs]?: string };
 
 const INPUT_NAMES: { [K in keyof Inputs]-?: string } = {
   upstream: 'upstream',
@@ -113,6 +123,16 @@ const INPUT_NAMES: { [K in keyof Inputs]-?: string } = {
   openaiApiKey: 'openai_api_key',
   forkRemoteUrl: 'fork_remote_url',
   fakeScript: 'fake_script',
+  phase: 'phase',
+  artifactDir: 'artifact_dir',
+  candidateDigest: 'candidate_digest',
+  verificationDir: 'verification_dir',
+  verificationDigest: 'verification_digest',
+  upstreamToken: 'upstream_token',
+  initialBase: 'initial_base',
+  sandbox: 'sandbox',
+  requireHardLimits: 'require_hard_limits',
+  resultsDigest: 'results_digest',
 };
 
 export function readRawInputs(): RawInputs {
@@ -120,6 +140,8 @@ export function readRawInputs(): RawInputs {
   for (const key of Object.keys(INPUT_NAMES) as (keyof Inputs)[]) {
     out[key] = core.getInput(INPUT_NAMES[key]);
   }
+  if (!out.phase) out.phase = 'prepare';
+  if (out.phase !== 'prepare' && !out.worker) out.worker = 'fake';
   return out;
 }
 

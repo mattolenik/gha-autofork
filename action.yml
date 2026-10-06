@@ -8,6 +8,29 @@ branding:
   color: purple
 
 inputs:
+  phase:
+    description: prepare exports a candidate; verify checks it in a fresh job; publish updates refs; report files a failure issue.
+    default: prepare
+  artifact_dir:
+    description: Downloaded candidate artifact directory (verify/publish), or results directory (report).
+  candidate_digest:
+    description: SHA-256 from the prepare job's artifact_digest output.
+  verification_dir:
+    description: Downloaded verification artifact directory (publish).
+  verification_digest:
+    description: SHA-256 from the verify job's artifact_digest output.
+  results_digest:
+    description: SHA-256 from the failed job's results_digest output (report).
+  initial_base:
+    description: Explicit merge-base SHA to initialize the first upstream checkpoint; without it the first candidate is staged.
+  upstream_token:
+    description: Optional read-only credential for a private upstream, scoped separately from the fork token.
+  sandbox:
+    description: Require Linux bubblewrap isolation for agents and verification. Disable only for trusted local tests.
+    default: 'true'
+  require_hard_limits:
+    description: Reject backends without enforced turn and dollar limits (currently Codex).
+    default: 'false'
   upstream:
     description: Upstream repository as owner/repo or a full URL.
     required: true
@@ -23,12 +46,12 @@ inputs:
     default: ${{ github.repository }}
   token:
     description: >-
-      Fine-grained PAT or GitHub App token with Contents write, Workflows write, and Issues write.
-      The default GITHUB_TOKEN cannot push workflow files and will not trigger downstream workflows.
+      Read-only token for prepare/verify. Publish/report jobs use a PAT or App token with Contents,
+      Workflows, and Issues write. Never pass a publishing credential to prepare or verify.
     required: true
   worker:
     description: Worker agent as backend:model, e.g. claude:claude-opus-5-5 or codex:gpt-6.1-sol.
-    required: true
+    required: false
   reviewer:
     description: Reviewer agent as backend:model. Use a different provider. Empty disables review.
     required: false
@@ -46,15 +69,15 @@ inputs:
     required: false
     default: '200'
   max_cost_usd:
-    description: Abort when the summed reported agent cost exceeds this amount.
+    description: Reported-cost budget. Codex spend is unknown; require_hard_limits rejects unsupported backends.
     required: false
     default: '10'
   max_turns:
-    description: Maximum agent turns per invocation.
+    description: Maximum Claude turns per invocation. Codex does not support this limit.
     required: false
     default: '60'
   agent_timeout_minutes:
-    description: Wall-clock limit per agent invocation.
+    description: Wall-clock limit per agent invocation and verification command.
     required: false
     default: '30'
   keep_backups:
@@ -64,7 +87,7 @@ inputs:
   publish:
     description: auto force-pushes after approval; stage leaves the temporary branch for manual promotion.
     required: false
-    default: auto
+    default: stage
   install_clis:
     description: Install missing agent CLIs on the runner.
     required: false
@@ -92,7 +115,7 @@ inputs:
 
 outputs:
   state:
-    description: Final state, one of APPROVED, NOTHING_TO_DO, FAST_FORWARDED, or a FAILED_* value.
+    description: PREPARED, VERIFIED, STAGED, APPROVED, NOTHING_TO_DO, FAST_FORWARDED, or a FAILED_* value.
   branch_sha:
     description: SHA the branch points at after the run.
   backup_ref:
@@ -101,6 +124,12 @@ outputs:
     description: Temporary branch name, kept on failure.
   results_dir:
     description: Directory containing results.json, transcripts, and range-diff output.
+  results_digest:
+    description: SHA-256 of results.json, for a separate failure-reporting job.
+  artifact_dir:
+    description: Candidate or verification artifact directory to upload.
+  artifact_digest:
+    description: SHA-256 of the artifact manifest; pass through trusted job outputs.
 
 runs:
   using: node24

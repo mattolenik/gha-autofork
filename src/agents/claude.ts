@@ -5,17 +5,20 @@ import { buildChildEnv } from '../env.js';
 import type { Logger } from '../log.js';
 import { spawnCollect, which } from './process.js';
 import type { AgentBackend, AgentRunOptions, AgentRunResult } from './types.js';
+import { sandboxCommand } from '../sandbox.js';
 
 /** Read-only git subcommands the worker may run. */
 export const READ_ONLY_GIT = ['diff', 'show', 'log', 'blame', 'grep', 'ls-files', 'status', 'rev-parse', 'cat-file', 'range-diff'] as const;
 
 export const CLAUDE_INSTALL_URL = 'https://claude.ai/install.sh';
+export const CLAUDE_VERSION = '2.1.288';
 
 export interface ClaudeBackendOptions {
   bin?: string;
-  /** Pin a version for the installer; default "stable". */
+  /** Exact tested version; defaults to CLAUDE_VERSION. */
   installVersion?: string;
   log: Logger;
+  sandbox?: boolean;
 }
 
 interface ClaudeJsonResult {
@@ -35,6 +38,8 @@ interface ClaudeJsonResult {
  */
 export class ClaudeBackend implements AgentBackend {
   readonly name = 'claude';
+  readonly capabilities = { turnLimit: true, budgetLimit: true, costReporting: true };
+  version: string | undefined;
   private bin: string;
 
   constructor(private readonly o: ClaudeBackendOptions) {
@@ -43,10 +48,12 @@ export class ClaudeBackend implements AgentBackend {
 
   async ensureInstalled(install: boolean): Promise<void> {
     const env = buildChildEnv();
-    if (await which(this.bin, env)) return;
+    if (await which(this.bin, env)) { await this.checkVersion(env); return; }
     if (!install) throw new Error(`"${this.bin}" is not on PATH and install_clis is false`);
-    this.o.log.info(`installing Claude Code (${this.o.installVersion ?? 'stable'})`);
-    const r = await spawnCollect('sh', ['-c', `curl -fsSL ${CLAUDE_INSTALL_URL} | bash -s ${this.o.installVersion ?? 'stable'}`], {
+    const version = this.o.installVersion ?? CLAUDE_VERSION;
+    if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Claude version must be an exact semver');
+    this.o.log.info(`installing Claude Code (${version})`);
+    const r = await spawnCollect('bash', ['-o', 'pipefail', '-c', 'curl -fsSL "$1" | bash -s "$2"', 'bash', CLAUDE_INSTALL_URL, version], {
       cwd: os.tmpdir(),
       env,
       timeoutMs: 5 * 60_000,
@@ -54,13 +61,21 @@ export class ClaudeBackend implements AgentBackend {
     });
     if (r.code !== 0) throw new Error(`Claude Code install failed: ${r.stderr.trim() || r.stdout.trim()}`);
     const local = path.join(env.HOME ?? os.homedir(), '.local', 'bin', 'claude');
-    if (await which(this.bin, env)) return;
+    if (await which(this.bin, env)) { await this.checkVersion(env); return; }
     try {
       await fs.access(local);
       this.bin = local;
     } catch {
       throw new Error('Claude Code installed but the "claude" binary was not found on PATH or in ~/.local/bin');
     }
+    await this.checkVersion(env);
+  }
+
+  private async checkVersion(env: Record<string, string>): Promise<void> {
+    const result = await spawnCollect(this.bin, ['--version'], { cwd: os.tmpdir(), env, timeoutMs: 10_000, backendName: this.name });
+    this.version = result.stdout.trim();
+    const expected = this.o.installVersion ?? CLAUDE_VERSION;
+    if (result.code !== 0 || this.version.match(/\d+\.\d+\.\d+/)?.[0] !== expected) throw new Error(`expected Claude Code ${expected}, found ${this.version}`);
   }
 
   buildArgs(opts: AgentRunOptions): string[] {
@@ -108,9 +123,11 @@ export class ClaudeBackend implements AgentBackend {
         CLAUDE_CONFIG_DIR: configDir,
       };
       if (!env.ANTHROPIC_API_KEY) throw new Error('claude backend needs ANTHROPIC_API_KEY (anthropic_api_key input)');
-      const r = await spawnCollect(this.bin, this.buildArgs(opts), {
+      const args = this.buildArgs(opts);
+      const launch = this.o.sandbox ? await sandboxCommand(this.bin, args, opts.cwd, opts.mode, env, [configDir]) : { bin: this.bin, args, env };
+      const r = await spawnCollect(launch.bin, launch.args, {
         cwd: opts.cwd,
-        env,
+        env: launch.env,
         stdin: prompt,
         timeoutMs: opts.timeoutMs,
         backendName: this.name,

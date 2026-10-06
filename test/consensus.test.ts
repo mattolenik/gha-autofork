@@ -212,16 +212,13 @@ describe('runConsensus', () => {
     expect(r.rounds[0]!.verdict!.verdict).toBe('approve');
   });
 
-  it('resets the worktree when a read-only reviewer leaves changes behind', async () => {
+  it('rejects a read-only reviewer that leaves changes behind', async () => {
     fx = await createFixture();
     const s = await setup({ review: [{ hook: 'echo junk > junk.txt && echo more >> README.md' }] });
-    const r = await s.run();
-    expect(r.state).toBe('APPROVED');
-    expect(r.notes.join('\n')).toMatch(/left the worktree dirty/);
-    expect(await s.h.wt.statusPorcelain()).toEqual([]);
+    await expect(s.run()).rejects.toMatchObject({ state: 'FAILED_TAMPERED' });
   });
 
-  it('discards unreported worker edits and folds reported ones into the last patch when targeting conflicts', async () => {
+  it('folds reported edits into the last patch when targeting conflicts', async () => {
     fx = await createFixture();
     const CLAMP_FIX = ['export function clamp(v, lo, hi) {', '  v = Number(v);', '  return Math.min(hi, Math.max(lo, v)); // fixed', '}', ''].join('\n');
     const s = await setup({
@@ -233,14 +230,12 @@ describe('runConsensus', () => {
         {
           verdict: 'approve',
           files: { 'src/util.js': CLAMP_FIX },
-          hook: 'echo stray > stray.txt',
           responses: [{ issue_id: 'I1', action: 'fixed', explanation: 'done', target_patch: fx.patchShas[0]!.slice(0, 8) }],
         },
       ],
     });
     const r = await s.run();
     expect(r.state).toBe('APPROVED');
-    expect(r.notes.join('\n')).toMatch(/unreported files, discarded: stray\.txt/);
     expect(r.rounds[0]!.foldWarnings.join('\n')).toMatch(/folded all changes into the last patch/);
     const last = s.outcome.mapping.get(fx.patchShas[2]!)!;
     expect((await s.h.wt.run(['show', `${last}:src/util.js`])).stdout).toBe(CLAMP_FIX);

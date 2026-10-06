@@ -1,96 +1,221 @@
-# Reusable workflow: call it from a fork with `uses: mattolenik/gha-autopatch/.github/workflows/autopatch.yml@v1`.
-# Most forks can use examples/fork-workflow.yml instead, which calls the action directly.
 name: autopatch
 
 on:
   workflow_call:
     inputs:
       upstream:
-        description: Upstream repository as owner/repo
         required: true
         type: string
+      repository:
+        type: string
+        default: ''
       upstream_branch:
-        required: false
         type: string
         default: ''
       branch:
-        required: false
+        type: string
+        default: ''
+      initial_base:
         type: string
         default: ''
       worker:
-        description: backend:model for the agent that resolves conflicts
         required: true
         type: string
       reviewer:
-        description: backend:model for the independent reviewer (use a different provider)
-        required: false
         type: string
         default: ''
       verify_command:
-        required: false
         type: string
         default: ''
       max_rounds:
-        required: false
         type: string
         default: '3'
       max_cost_usd:
-        required: false
         type: string
         default: '10'
+      require_hard_limits:
+        type: boolean
+        default: false
       publish:
-        required: false
         type: string
-        default: auto
+        default: stage
       dry_run:
-        required: false
         type: boolean
         default: false
     secrets:
       token:
-        description: PAT or GitHub App token with Contents, Workflows and Issues write
+        description: Publishing credential; available only to publish/report jobs
         required: true
+      read_token:
+        description: Optional read-only token for a fork in another repository
+        required: false
+      upstream_token:
+        description: Optional read-only token for a private upstream
+        required: false
       anthropic_api_key:
         required: false
       openai_api_key:
         required: false
 
-permissions: {}
+permissions:
+  contents: read
+  actions: read
 
 concurrency:
-  group: autopatch-${{ github.repository }}
+  group: autopatch-${{ inputs.repository || github.repository }}
   cancel-in-progress: false
 
 jobs:
-  autopatch:
+  prepare:
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    outputs:
+      state: ${{ steps.prepare.outputs.state }}
+      digest: ${{ steps.prepare.outputs.artifact_digest }}
+      artifact_id: ${{ steps.candidate.outputs.artifact-id }}
+      results_digest: ${{ steps.prepare.outputs.results_digest }}
+      results_id: ${{ steps.results.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v7
         with:
+          repository: ${{ inputs.repository || github.repository }}
+          token: ${{ secrets.read_token || github.token }}
           fetch-depth: 0
           persist-credentials: false
-
-      - id: autopatch
+      - run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - id: prepare
         uses: mattolenik/gha-autopatch@v1
         with:
+          phase: prepare
+          repository: ${{ inputs.repository || github.repository }}
           upstream: ${{ inputs.upstream }}
           upstream_branch: ${{ inputs.upstream_branch }}
           branch: ${{ inputs.branch }}
-          token: ${{ secrets.token }}
+          initial_base: ${{ inputs.initial_base }}
+          token: ${{ secrets.read_token || github.token }}
+          upstream_token: ${{ secrets.upstream_token }}
           worker: ${{ inputs.worker }}
           reviewer: ${{ inputs.reviewer }}
           verify_command: ${{ inputs.verify_command }}
           max_rounds: ${{ inputs.max_rounds }}
           max_cost_usd: ${{ inputs.max_cost_usd }}
-          publish: ${{ inputs.publish }}
+          require_hard_limits: ${{ inputs.require_hard_limits }}
           dry_run: ${{ inputs.dry_run }}
           anthropic_api_key: ${{ secrets.anthropic_api_key }}
           openai_api_key: ${{ secrets.openai_api_key }}
+      - id: candidate
+        if: steps.prepare.outputs.state == 'PREPARED'
+        uses: actions/upload-artifact@v6
+        with:
+          name: autopatch-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.prepare.outputs.artifact_dir }}
+          if-no-files-found: error
+      - id: results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: autopatch-prepare-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.prepare.outputs.results_dir || format('{0}/autopatch/results', runner.temp) }}
+          if-no-files-found: ignore
 
+  verify:
+    needs: prepare
+    if: needs.prepare.outputs.state == 'PREPARED'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      digest: ${{ steps.verify.outputs.artifact_digest }}
+      artifact_id: ${{ steps.verification.outputs.artifact-id }}
+      results_digest: ${{ steps.verify.outputs.results_digest }}
+      results_id: ${{ steps.results.outputs.artifact-id }}
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          artifact-ids: ${{ needs.prepare.outputs.artifact_id }}
+          path: ${{ runner.temp }}/candidate-input
+          merge-multiple: true
+      - run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - id: verify
+        uses: mattolenik/gha-autopatch@v1
+        with:
+          phase: verify
+          repository: ${{ inputs.repository || github.repository }}
+          upstream: ${{ inputs.upstream }}
+          upstream_branch: ${{ inputs.upstream_branch }}
+          branch: ${{ inputs.branch }}
+          token: ${{ secrets.read_token || github.token }}
+          artifact_dir: ${{ runner.temp }}/candidate-input
+          candidate_digest: ${{ needs.prepare.outputs.digest }}
+          verify_command: ${{ inputs.verify_command }}
+      - id: verification
+        uses: actions/upload-artifact@v6
+        with:
+          name: autopatch-verification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.verify.outputs.artifact_dir }}
+          if-no-files-found: error
+      - id: results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: autopatch-verify-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.verify.outputs.results_dir || format('{0}/autopatch-verify/results', runner.temp) }}
+          if-no-files-found: ignore
+
+  publish:
+    needs: [prepare, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          artifact-ids: ${{ needs.prepare.outputs.artifact_id }}
+          path: ${{ runner.temp }}/candidate-input
+          merge-multiple: true
+      - uses: actions/download-artifact@v6
+        with:
+          artifact-ids: ${{ needs.verify.outputs.artifact_id }}
+          path: ${{ runner.temp }}/verification-input
+          merge-multiple: true
+      - id: publish
+        uses: mattolenik/gha-autopatch@v1
+        with:
+          phase: publish
+          repository: ${{ inputs.repository || github.repository }}
+          upstream: ${{ inputs.upstream }}
+          upstream_branch: ${{ inputs.upstream_branch }}
+          branch: ${{ inputs.branch }}
+          token: ${{ secrets.token }}
+          artifact_dir: ${{ runner.temp }}/candidate-input
+          candidate_digest: ${{ needs.prepare.outputs.digest }}
+          verification_dir: ${{ runner.temp }}/verification-input
+          verification_digest: ${{ needs.verify.outputs.digest }}
+          verify_command: ${{ inputs.verify_command }}
+          publish: ${{ inputs.publish }}
+          dry_run: ${{ inputs.dry_run }}
       - if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: autopatch-results
-          path: ${{ steps.autopatch.outputs.results_dir || format('{0}/autopatch/results', runner.temp) }}
+          name: autopatch-publish-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.publish.outputs.results_dir }}
           if-no-files-found: ignore
+
+  report:
+    needs: [prepare, verify]
+    if: always() && !inputs.dry_run && ((needs.prepare.result == 'failure' && needs.prepare.outputs.results_digest != '') || (needs.verify.result == 'failure' && needs.verify.outputs.results_digest != ''))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          artifact-ids: ${{ needs.verify.outputs.results_id || needs.prepare.outputs.results_id }}
+          path: ${{ runner.temp }}/failure-input
+          merge-multiple: true
+      - uses: mattolenik/gha-autopatch@v1
+        with:
+          phase: report
+          repository: ${{ inputs.repository || github.repository }}
+          upstream: ${{ inputs.upstream }}
+          branch: ${{ inputs.branch }}
+          token: ${{ secrets.token }}
+          artifact_dir: ${{ runner.temp }}/failure-input
+          results_digest: ${{ needs.verify.outputs.results_digest || needs.prepare.outputs.results_digest }}

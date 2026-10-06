@@ -2,6 +2,7 @@ import type { Git } from './git.js';
 import type { Logger } from './log.js';
 import type { RebasePlan } from './plan.js';
 import type { RebaseOutcome } from './rebase.js';
+import { validateFilePath } from './state.js';
 
 export interface FoldOptions {
   git: Git;
@@ -26,11 +27,9 @@ export interface FoldResult {
 /** Resolve a patch reference (original/new sha, abbreviated) to the current sha, or undefined. */
 export function resolvePatchRef(ref: string, mapping: Map<string, string>): string | undefined {
   const r = ref.trim().toLowerCase();
-  if (!r) return undefined;
-  for (const [orig, cur] of mapping) {
-    if (orig.startsWith(r) || cur.startsWith(r)) return cur;
-  }
-  return undefined;
+  if (!/^[0-9a-f]{7,40}$/.test(r)) return undefined;
+  const matches = [...mapping].filter(([orig, cur]) => orig.startsWith(r) || cur.startsWith(r));
+  return matches.length === 1 ? matches[0]![1] : undefined;
 }
 
 /**
@@ -48,11 +47,13 @@ export async function foldChanges(o: FoldOptions): Promise<FoldResult> {
   const head = await git.revParse('HEAD');
 
   const named = o.targetPatch ? resolvePatchRef(o.targetPatch, outcome.mapping) : undefined;
-  if (o.targetPatch && !named) warnings.push(`target patch "${o.targetPatch}" not found in the series; choosing by file history`);
+  if (o.targetPatch && !named) throw new Error(`target patch "${o.targetPatch}" is missing or ambiguous`);
+  if (!(await git.indexIsEmpty())) throw new Error('index must be empty before folding review fixes');
 
   const groups = new Map<string, string[]>();
   const folded: { path: string; into: string }[] = [];
   for (const file of o.files) {
+    await validateFilePath(git.cwd, file);
     let into = named;
     if (!into) {
       const touched = await git.out(['log', '-1', '--format=%H', `${plan.upstreamSha}..HEAD`, '--', file]);

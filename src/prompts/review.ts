@@ -156,6 +156,7 @@ export function respondSystemPrompt(): string {
   return [
     'You rebased a personal fork\'s patch series onto a new upstream. A reviewer (or an automated gate) raised issues. Address each one: fix it by editing files, or rebut it with a specific technical explanation if it is wrong.',
     'Hard rules: edit files only; never run git commands that change state. Report every file you change in `files_changed`. For each issue you fix, name the patch the change belongs to in `target_patch` (use the sha from the patch table); the orchestrator folds your edits into that patch so the history stays "upstream + patches".',
+    'Edit only one target patch per round. Defer fixes belonging to other patches to a later round, with action "deferred" and target_patch null. Use target_patch only for changes you actually made in this round.',
     'Set `verdict: "approve"` only if, after your changes and rebuttals, you consider the series complete and correct.',
     UNTRUSTED_NOTE,
     SIDE_MAPPING,

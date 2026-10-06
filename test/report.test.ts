@@ -96,7 +96,7 @@ describe('renderSummary', () => {
       reason: 'no consensus after 3 round(s)',
       headSha: 'e'.repeat(40),
       notes: [],
-      gates: { ok: true, failures: [], rangeDiff: '', changedFiles: [], verify: { command: 'npm test', code: 0, timedOut: false, durationMs: 1000, outputTail: 'ok' } },
+      gates: { candidate: { headSha: 'e'.repeat(40), treeSha: 'f'.repeat(40) }, ok: true, failures: [], rangeDiff: '', changedFiles: [], verify: { command: 'npm test', code: 0, timedOut: false, durationMs: 1000, outputTail: 'ok' } },
       rounds: [
         {
           round: 1,
@@ -111,6 +111,7 @@ describe('renderSummary', () => {
     gates: null,
     publish: null,
     tempBranch: 'autopatch/99-1',
+    tempBranchRemote: true,
     headSha: 'e'.repeat(40),
     leftoverBranches: ['autopatch/42-1'],
     costUsd: 1.5,
@@ -127,7 +128,7 @@ describe('renderSummary', () => {
     expect(md).toContain('applied, 1 conflict(s) resolved');
     expect(md).toContain('[I1] blocker: wrong');
     expect(md).toContain('How to finish by hand');
-    expect(md).toContain('git checkout -b autopatch-rescue origin/autopatch/99-1');
+    expect(md).toContain("git checkout -b autopatch-rescue 'origin/autopatch/99-1'");
     expect(md).toContain(`--force-with-lease=main:${'a'.repeat(40)}`);
     expect(md).toContain('autopatch/42-1');
     expect(md).toContain('https://example/run');

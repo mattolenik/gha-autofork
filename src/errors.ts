@@ -4,6 +4,8 @@ export const STATES = [
   'NOTHING_TO_DO',
   'FAST_FORWARDED',
   'STAGED',
+  'PREPARED',
+  'VERIFIED',
   'FAILED_PLAN',
   'FAILED_REBASE',
   'FAILED_GATE',

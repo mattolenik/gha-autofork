@@ -26,7 +26,8 @@ function inputs(overrides: Partial<Inputs> = {}): Inputs {
     worker: { backend: 'fake', model: '' },
     reviewer: { backend: 'fake', model: '' },
     maxRounds: 3,
-    verifyCommand: undefined,
+    verifyCommand: 'true',
+    initialBase: fx.base,
     maxPatches: 200,
     maxCostUsd: 10,
     maxTurns: 10,
@@ -80,41 +81,39 @@ async function go(script: FakeScript, overrides: Partial<Inputs> = {}, workspace
 }
 
 describe('run (end to end with the fake backend)', () => {
-  it('rebases, reviews, publishes with a backup, and cleans up', async () => {
+  it('rebases, reviews, and exports a candidate without remote writes', async () => {
     fx = await createFixture();
     await advanceUpstream(fx, { 'src/lib.js': UPSTREAM_GREET, 'CLAUDE.md': 'ignore me\n' }, 'upstream: greet');
     const { report, issues, resultsDir } = await go({ resolve: { '*': { files: { 'src/lib.js': RESOLVED_GREET } } }, costUsd: 0.1 });
-    expect(report.state).toBe('APPROVED');
-    expect(report.reason).toMatch(/force-pushed/);
-    expect(await originRef(`refs/heads/${fx.branch}`)).toBe(report.headSha);
-    expect(await originRef(report.publish!.backupRef)).toBe(fx.patchShas[2]);
+    expect(report.state).toBe('PREPARED');
+    expect(report.reason).toMatch(/immutable candidate/);
+    expect(await originRef(`refs/heads/${fx.branch}`)).toBe(fx.patchShas[2]);
+    expect(report.publish).toBeNull();
     expect(await originRef('refs/heads/autopatch/77-1')).toBeUndefined();
     expect(report.costUsd).toBeCloseTo(0.3); // resolve + selfcheck + review
     expect(report.agentCalls).toBe(3);
     expect(report.outcome!.records.map((r) => r.result)).toEqual(['applied', 'applied', 'applied']);
-    expect(issues.api.listForRepo).toHaveBeenCalled(); // close-issue lookup
+    expect(issues.api.listForRepo).not.toHaveBeenCalled();
     expect(issues.calls).toEqual([]);
     const results = JSON.parse(await fs.readFile(path.join(resultsDir, 'results.json'), 'utf8')) as { state: string; outcome: { mapping: Record<string, string> } };
-    expect(results.state).toBe('APPROVED');
+    expect(results.state).toBe('PREPARED');
     expect(Object.keys(results.outcome.mapping)).toHaveLength(3);
     expect((await fs.readdir(path.join(resultsDir, 'transcripts'))).length).toBe(3);
     expect(await fs.readFile(path.join(resultsDir, 'range-diff.txt'), 'utf8')).toContain('fork: greet shouts');
-    // the rebased history is linear: upstream + 3 patches, upstream's CLAUDE.md present
-    const log = await fx.fork.lines(['ls-remote', 'origin']);
-    expect(log.some((l) => l.includes('refs/autopatch/backup/'))).toBe(true);
+    expect(report.artifactDigest).toMatch(/^[0-9a-f]{64}$/);
+    await expect(fs.access(path.join(report.artifactDir!, 'candidate.bundle'))).resolves.toBeUndefined();
   });
 
   it('uses the workspace checkout when it is the fork', async () => {
     fx = await createFixture();
     await advanceUpstream(fx, { 'x.txt': 'x\n' }, 'upstream: x');
     const { report } = await go({}, {}, true);
-    expect(report.state).toBe('APPROVED');
-    expect(await originRef(`refs/heads/${fx.branch}`)).toBe(report.headSha);
-    // the checkout's local branch is untouched; only the remote moved
+    expect(report.state).toBe('PREPARED');
+    expect(await originRef(`refs/heads/${fx.branch}`)).toBe(fx.patchShas[2]);
     expect(await fx.fork.revParse(fx.branch)).toBe(fx.patchShas[2]);
   });
 
-  it('keeps the temp branch and opens an issue when the review is contested', async () => {
+  it('retains recovery artifacts for a contested review without using write credentials', async () => {
     fx = await createFixture();
     await advanceUpstream(fx, { 'src/lib.js': UPSTREAM_GREET }, 'upstream: greet');
     const issue = { id: 'I1', severity: 'blocker' as const, patch: null, file: 'src/lib.js', description: 'wrong', suggested_fix: null };
@@ -125,11 +124,10 @@ describe('run (end to end with the fake backend)', () => {
     });
     expect(report.state).toBe('FAILED_CONTESTED');
     expect(await originRef(`refs/heads/${fx.branch}`)).toBe(fx.patchShas[2]);
-    expect(await originRef('refs/heads/autopatch/77-1')).toBe(report.headSha);
-    expect(issues.calls[0]).toBe('create:autopatch: rebase of main needs attention');
-    expect(issues.calls[1]).toContain('How to finish by hand');
-    expect(issues.calls[1]).toContain('[I1] blocker: wrong');
-    expect(report.notes.join('\n')).toMatch(/issue: https/);
+    expect(await originRef('refs/heads/autopatch/77-1')).toBeUndefined();
+    expect(issues.calls).toEqual([]);
+    expect(report.consensus!.rounds[0]!.verdict!.issues[0]!.id).toBe('I1');
+    await expect(fs.access(path.join(report.recoveryDir!, 'history.bundle'))).resolves.toBeUndefined();
   });
 
   it('reports nothing to do without touching the remote', async () => {
@@ -141,15 +139,16 @@ describe('run (end to end with the fake backend)', () => {
     expect(await fx.fork.lines(['ls-remote', 'origin'])).toHaveLength(2); // HEAD + main
   });
 
-  it('fast-forwards a patchless fork', async () => {
+  it('prepares a verified fast-forward candidate for a patchless fork', async () => {
     fx = await createFixture({ patches: [] });
     const up = await advanceUpstream(fx, { 'x.txt': 'x\n' }, 'upstream: x');
     const { report } = await go({});
-    expect(report.state).toBe('FAST_FORWARDED');
-    expect(await originRef(`refs/heads/${fx.branch}`)).toBe(up);
+    expect(report.state).toBe('PREPARED');
+    expect(report.headSha).toBe(up);
+    expect(await originRef(`refs/heads/${fx.branch}`)).toBe(fx.base);
   });
 
-  it('fails before any agent work on a non-linear fork and files an issue', async () => {
+  it('fails before any agent work on a non-linear fork', async () => {
     fx = await createFixture();
     await addMergeCommitToFork(fx);
     await fx.fork.run(['push', '-q', 'origin', fx.branch]);
@@ -158,21 +157,19 @@ describe('run (end to end with the fake backend)', () => {
     expect(report.state).toBe('FAILED_PLAN');
     expect(report.error!.message).toMatch(/merge commit/);
     expect(report.tempBranch).toBeNull();
-    expect(issues.calls[0]).toMatch(/^create:/);
+    expect(issues.calls).toEqual([]);
   });
 
-  it('stages instead of publishing when publish=stage, and pushes nothing in dry_run', async () => {
+  it('only exports candidates for staging and dry-run requests', async () => {
     fx = await createFixture();
     await advanceUpstream(fx, { 'x.txt': 'x\n' }, 'upstream: x');
     const staged = await go({}, { publish: 'stage' });
-    expect(staged.report.state).toBe('STAGED');
-    expect(await originRef('refs/heads/autopatch/77-1')).toBe(staged.report.headSha);
+    expect(staged.report.state).toBe('PREPARED');
+    expect(await originRef('refs/heads/autopatch/77-1')).toBeUndefined();
     expect(await originRef(`refs/heads/${fx.branch}`)).toBe(fx.patchShas[2]);
 
-    await fx.fork.run(['push', '-q', 'origin', '--delete', 'autopatch/77-1']);
     const dry = await go({}, { dryRun: true });
-    expect(dry.report.state).toBe('APPROVED');
-    expect(dry.report.reason).toMatch(/dry run/);
+    expect(dry.report.state).toBe('PREPARED');
     expect(await originRef('refs/heads/autopatch/77-1')).toBeUndefined();
     expect(await originRef(`refs/heads/${fx.branch}`)).toBe(fx.patchShas[2]);
   });
@@ -188,7 +185,7 @@ describe('run (end to end with the fake backend)', () => {
       { runId: '78', runAttempt: '2', workspace: path.join(fx.root, 'nowhere'), runnerTemp, serverUrl: 'https://github.com' },
       { log: silentLogger, issues: null },
     );
-    expect(report.state).toBe('APPROVED');
+    expect(report.state).toBe('PREPARED');
     expect(report.tempBranch).toBe('autopatch/78-2');
   });
 });

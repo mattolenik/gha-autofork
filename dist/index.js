@@ -1072,14 +1072,14 @@ var require_util = __commonJS({
         }
         const port = url2.port != null ? url2.port : url2.protocol === "https:" ? 443 : 80;
         let origin = url2.origin != null ? url2.origin : `${url2.protocol || ""}//${url2.hostname || ""}:${port}`;
-        let path11 = url2.path != null ? url2.path : `${url2.pathname || ""}${url2.search || ""}`;
+        let path16 = url2.path != null ? url2.path : `${url2.pathname || ""}${url2.search || ""}`;
         if (origin[origin.length - 1] === "/") {
           origin = origin.slice(0, origin.length - 1);
         }
-        if (path11 && path11[0] !== "/") {
-          path11 = `/${path11}`;
+        if (path16 && path16[0] !== "/") {
+          path16 = `/${path16}`;
         }
-        return new URL(`${origin}${path11}`);
+        return new URL(`${origin}${path16}`);
       }
       if (!isHttpOrHttpsPrefixed(url2.origin || url2.protocol)) {
         throw new InvalidArgumentError("Invalid URL protocol: the URL must start with `http:` or `https:`.");
@@ -1530,39 +1530,39 @@ var require_diagnostics = __commonJS({
       });
       diagnosticsChannel.channel("undici:client:sendHeaders").subscribe((evt) => {
         const {
-          request: { method, path: path11, origin }
+          request: { method, path: path16, origin }
         } = evt;
-        debuglog("sending request to %s %s/%s", method, origin, path11);
+        debuglog("sending request to %s %s/%s", method, origin, path16);
       });
       diagnosticsChannel.channel("undici:request:headers").subscribe((evt) => {
         const {
-          request: { method, path: path11, origin },
+          request: { method, path: path16, origin },
           response: { statusCode }
         } = evt;
         debuglog(
           "received response to %s %s/%s - HTTP %d",
           method,
           origin,
-          path11,
+          path16,
           statusCode
         );
       });
       diagnosticsChannel.channel("undici:request:trailers").subscribe((evt) => {
         const {
-          request: { method, path: path11, origin }
+          request: { method, path: path16, origin }
         } = evt;
-        debuglog("trailers received from %s %s/%s", method, origin, path11);
+        debuglog("trailers received from %s %s/%s", method, origin, path16);
       });
       diagnosticsChannel.channel("undici:request:error").subscribe((evt) => {
         const {
-          request: { method, path: path11, origin },
+          request: { method, path: path16, origin },
           error: error63
         } = evt;
         debuglog(
           "request to %s %s/%s errored - %s",
           method,
           origin,
-          path11,
+          path16,
           error63.message
         );
       });
@@ -1611,9 +1611,9 @@ var require_diagnostics = __commonJS({
         });
         diagnosticsChannel.channel("undici:client:sendHeaders").subscribe((evt) => {
           const {
-            request: { method, path: path11, origin }
+            request: { method, path: path16, origin }
           } = evt;
-          debuglog("sending request to %s %s/%s", method, origin, path11);
+          debuglog("sending request to %s %s/%s", method, origin, path16);
         });
       }
       diagnosticsChannel.channel("undici:websocket:open").subscribe((evt) => {
@@ -1676,7 +1676,7 @@ var require_request = __commonJS({
     var kHandler = /* @__PURE__ */ Symbol("handler");
     var Request = class {
       constructor(origin, {
-        path: path11,
+        path: path16,
         method,
         body,
         headers,
@@ -1691,11 +1691,11 @@ var require_request = __commonJS({
         expectContinue,
         servername
       }, handler2) {
-        if (typeof path11 !== "string") {
+        if (typeof path16 !== "string") {
           throw new InvalidArgumentError("path must be a string");
-        } else if (path11[0] !== "/" && !(path11.startsWith("http://") || path11.startsWith("https://")) && method !== "CONNECT") {
+        } else if (path16[0] !== "/" && !(path16.startsWith("http://") || path16.startsWith("https://")) && method !== "CONNECT") {
           throw new InvalidArgumentError("path must be an absolute URL or start with a slash");
-        } else if (invalidPathRegex.test(path11)) {
+        } else if (invalidPathRegex.test(path16)) {
           throw new InvalidArgumentError("invalid request path");
         }
         if (typeof method !== "string") {
@@ -1761,7 +1761,7 @@ var require_request = __commonJS({
         this.completed = false;
         this.aborted = false;
         this.upgrade = upgrade || null;
-        this.path = query ? buildURL(path11, query) : path11;
+        this.path = query ? buildURL(path16, query) : path16;
         this.origin = origin;
         this.idempotent = idempotent == null ? method === "HEAD" || method === "GET" : idempotent;
         this.blocking = blocking2 == null ? false : blocking2;
@@ -2150,9 +2150,9 @@ var require_dispatcher_base = __commonJS({
       }
       close(callback) {
         if (callback === void 0) {
-          return new Promise((resolve3, reject) => {
+          return new Promise((resolve5, reject) => {
             this.close((err, data) => {
-              return err ? reject(err) : resolve3(data);
+              return err ? reject(err) : resolve5(data);
             });
           });
         }
@@ -2190,12 +2190,12 @@ var require_dispatcher_base = __commonJS({
           err = null;
         }
         if (callback === void 0) {
-          return new Promise((resolve3, reject) => {
+          return new Promise((resolve5, reject) => {
             this.destroy(err, (err2, data) => {
               return err2 ? (
                 /* istanbul ignore next: should never error */
                 reject(err2)
-              ) : resolve3(data);
+              ) : resolve5(data);
             });
           });
         }
@@ -4462,8 +4462,8 @@ var require_util2 = __commonJS({
     function createDeferredPromise() {
       let res;
       let rej;
-      const promise2 = new Promise((resolve3, reject) => {
-        res = resolve3;
+      const promise2 = new Promise((resolve5, reject) => {
+        res = resolve5;
         rej = reject;
       });
       return { promise: promise2, resolve: res, reject: rej };
@@ -6447,7 +6447,7 @@ var require_client_h1 = __commonJS({
       return method !== "GET" && method !== "HEAD" && method !== "OPTIONS" && method !== "TRACE" && method !== "CONNECT";
     }
     function writeH1(client, request2) {
-      const { method, path: path11, host, upgrade, blocking: blocking2, reset } = request2;
+      const { method, path: path16, host, upgrade, blocking: blocking2, reset } = request2;
       let { body, headers, contentLength } = request2;
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH" || method === "QUERY" || method === "PROPFIND" || method === "PROPPATCH";
       if (util.isFormDataLike(body)) {
@@ -6528,7 +6528,7 @@ var require_client_h1 = __commonJS({
       if (blocking2) {
         socket[kBlocking] = true;
       }
-      let header2 = `${method} ${path11} HTTP/1.1\r
+      let header2 = `${method} ${path16} HTTP/1.1\r
 `;
       if (typeof host === "string") {
         header2 += `host: ${host}\r
@@ -6715,12 +6715,12 @@ upgrade: ${upgrade}\r
           cb();
         }
       }
-      const waitForDrain = () => new Promise((resolve3, reject) => {
+      const waitForDrain = () => new Promise((resolve5, reject) => {
         assert2(callback === null);
         if (socket[kError]) {
           reject(socket[kError]);
         } else {
-          callback = resolve3;
+          callback = resolve5;
         }
       });
       socket.on("close", onDrain).on("drain", onDrain);
@@ -7059,7 +7059,7 @@ var require_client_h2 = __commonJS({
     }
     function writeH2(client, request2) {
       const session = client[kHTTP2Session];
-      const { method, path: path11, host, upgrade, expectContinue, signal, headers: reqHeaders } = request2;
+      const { method, path: path16, host, upgrade, expectContinue, signal, headers: reqHeaders } = request2;
       let { body } = request2;
       if (upgrade) {
         util.errorRequest(client, request2, new Error("Upgrade not supported for H2"));
@@ -7156,7 +7156,7 @@ var require_client_h2 = __commonJS({
         });
         return true;
       }
-      headers[HTTP2_HEADER_PATH] = path11;
+      headers[HTTP2_HEADER_PATH] = path16;
       headers[HTTP2_HEADER_SCHEME] = "https";
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH";
       if (body && typeof body.read === "function") {
@@ -7392,12 +7392,12 @@ var require_client_h2 = __commonJS({
           cb();
         }
       }
-      const waitForDrain = () => new Promise((resolve3, reject) => {
+      const waitForDrain = () => new Promise((resolve5, reject) => {
         assert2(callback === null);
         if (socket[kError]) {
           reject(socket[kError]);
         } else {
-          callback = resolve3;
+          callback = resolve5;
         }
       });
       h2stream.on("close", onDrain).on("drain", onDrain);
@@ -7509,9 +7509,9 @@ var require_redirect_handler = __commonJS({
           return this.handler.onHeaders(statusCode, headers, resume, statusText);
         }
         const { origin, pathname, search } = util.parseURL(new URL(this.location, this.opts.origin && new URL(this.opts.path, this.opts.origin)));
-        const path11 = search ? `${pathname}${search}` : pathname;
+        const path16 = search ? `${pathname}${search}` : pathname;
         this.opts.headers = cleanRequestHeaders(this.opts.headers, statusCode === 303, this.opts.origin !== origin);
-        this.opts.path = path11;
+        this.opts.path = path16;
         this.opts.origin = origin;
         this.opts.maxRedirections = 0;
         this.opts.query = null;
@@ -7875,16 +7875,16 @@ var require_client = __commonJS({
         return this[kNeedDrain] < 2;
       }
       async [kClose]() {
-        return new Promise((resolve3) => {
+        return new Promise((resolve5) => {
           if (this[kSize]) {
-            this[kClosedResolve] = resolve3;
+            this[kClosedResolve] = resolve5;
           } else {
-            resolve3(null);
+            resolve5(null);
           }
         });
       }
       async [kDestroy](err) {
-        return new Promise((resolve3) => {
+        return new Promise((resolve5) => {
           const requests = this[kQueue].splice(this[kPendingIdx]);
           for (let i = 0; i < requests.length; i++) {
             const request2 = requests[i];
@@ -7895,7 +7895,7 @@ var require_client = __commonJS({
               this[kClosedResolve]();
               this[kClosedResolve] = null;
             }
-            resolve3(null);
+            resolve5(null);
           };
           if (this[kHTTPContext]) {
             this[kHTTPContext].destroy(err, callback);
@@ -7946,7 +7946,7 @@ var require_client = __commonJS({
         });
       }
       try {
-        const socket = await new Promise((resolve3, reject) => {
+        const socket = await new Promise((resolve5, reject) => {
           client[kConnector]({
             host,
             hostname: hostname3,
@@ -7958,7 +7958,7 @@ var require_client = __commonJS({
             if (err) {
               reject(err);
             } else {
-              resolve3(socket2);
+              resolve5(socket2);
             }
           });
         });
@@ -8294,8 +8294,8 @@ var require_pool_base = __commonJS({
         if (this[kQueue].isEmpty()) {
           await Promise.all(this[kClients].map((c) => c.close()));
         } else {
-          await new Promise((resolve3) => {
-            this[kClosedResolve] = resolve3;
+          await new Promise((resolve5) => {
+            this[kClosedResolve] = resolve5;
           });
         }
       }
@@ -8746,10 +8746,10 @@ var require_proxy_agent = __commonJS({
         };
         const {
           origin,
-          path: path11 = "/",
+          path: path16 = "/",
           headers = {}
         } = opts;
-        opts.path = origin + path11;
+        opts.path = origin + path16;
         if (!("host" in headers) && !("Host" in headers)) {
           const { host } = new URL2(origin);
           headers.host = host;
@@ -9561,7 +9561,7 @@ var require_readable = __commonJS({
         if (this._readableState.closeEmitted) {
           return null;
         }
-        return await new Promise((resolve3, reject) => {
+        return await new Promise((resolve5, reject) => {
           if (this[kContentLength] > limit) {
             this.destroy(new AbortError());
           }
@@ -9574,7 +9574,7 @@ var require_readable = __commonJS({
             if (signal?.aborted) {
               reject(signal.reason ?? new AbortError());
             } else {
-              resolve3(null);
+              resolve5(null);
             }
           }).on("error", noop3).on("data", function(chunk) {
             limit -= chunk.length;
@@ -9593,7 +9593,7 @@ var require_readable = __commonJS({
     }
     async function consume(stream, type) {
       assert2(!stream[kConsume]);
-      return new Promise((resolve3, reject) => {
+      return new Promise((resolve5, reject) => {
         if (isUnusable(stream)) {
           const rState = stream._readableState;
           if (rState.destroyed && rState.closeEmitted === false) {
@@ -9610,7 +9610,7 @@ var require_readable = __commonJS({
             stream[kConsume] = {
               type,
               stream,
-              resolve: resolve3,
+              resolve: resolve5,
               reject,
               length: 0,
               body: []
@@ -9680,18 +9680,18 @@ var require_readable = __commonJS({
       return buffer;
     }
     function consumeEnd(consume2) {
-      const { type, body, resolve: resolve3, stream, length } = consume2;
+      const { type, body, resolve: resolve5, stream, length } = consume2;
       try {
         if (type === "text") {
-          resolve3(chunksDecode(body, length));
+          resolve5(chunksDecode(body, length));
         } else if (type === "json") {
-          resolve3(JSON.parse(chunksDecode(body, length)));
+          resolve5(JSON.parse(chunksDecode(body, length)));
         } else if (type === "arrayBuffer") {
-          resolve3(chunksConcat(body, length).buffer);
+          resolve5(chunksConcat(body, length).buffer);
         } else if (type === "blob") {
-          resolve3(new Blob(body, { type: stream[kContentType] }));
+          resolve5(new Blob(body, { type: stream[kContentType] }));
         } else if (type === "bytes") {
-          resolve3(chunksConcat(body, length));
+          resolve5(chunksConcat(body, length));
         }
         consumeFinish(consume2);
       } catch (err) {
@@ -9948,9 +9948,9 @@ var require_api_request = __commonJS({
     };
     function request2(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve5, reject) => {
           request2.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve3(data);
+            return err ? reject(err) : resolve5(data);
           });
         });
       }
@@ -10173,9 +10173,9 @@ var require_api_stream = __commonJS({
     };
     function stream(opts, factory, callback) {
       if (callback === void 0) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve5, reject) => {
           stream.call(this, opts, factory, (err, data) => {
-            return err ? reject(err) : resolve3(data);
+            return err ? reject(err) : resolve5(data);
           });
         });
       }
@@ -10460,9 +10460,9 @@ var require_api_upgrade = __commonJS({
     };
     function upgrade(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve5, reject) => {
           upgrade.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve3(data);
+            return err ? reject(err) : resolve5(data);
           });
         });
       }
@@ -10554,9 +10554,9 @@ var require_api_connect = __commonJS({
     };
     function connect(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve5, reject) => {
           connect.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve3(data);
+            return err ? reject(err) : resolve5(data);
           });
         });
       }
@@ -10721,20 +10721,20 @@ var require_mock_utils = __commonJS({
       }
       return true;
     }
-    function safeUrl(path11) {
-      if (typeof path11 !== "string") {
-        return path11;
+    function safeUrl(path16) {
+      if (typeof path16 !== "string") {
+        return path16;
       }
-      const pathSegments = path11.split("?");
+      const pathSegments = path16.split("?");
       if (pathSegments.length !== 2) {
-        return path11;
+        return path16;
       }
       const qp = new URLSearchParams(pathSegments.pop());
       qp.sort();
       return [...pathSegments, qp.toString()].join("?");
     }
-    function matchKey(mockDispatch2, { path: path11, method, body, headers }) {
-      const pathMatch = matchValue(mockDispatch2.path, path11);
+    function matchKey(mockDispatch2, { path: path16, method, body, headers }) {
+      const pathMatch = matchValue(mockDispatch2.path, path16);
       const methodMatch = matchValue(mockDispatch2.method, method);
       const bodyMatch = typeof mockDispatch2.body !== "undefined" ? matchValue(mockDispatch2.body, body) : true;
       const headersMatch = matchHeaders(mockDispatch2, headers);
@@ -10756,7 +10756,7 @@ var require_mock_utils = __commonJS({
     function getMockDispatch(mockDispatches, key) {
       const basePath = key.query ? buildURL(key.path, key.query) : key.path;
       const resolvedPath = typeof basePath === "string" ? safeUrl(basePath) : basePath;
-      let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path11 }) => matchValue(safeUrl(path11), resolvedPath));
+      let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path16 }) => matchValue(safeUrl(path16), resolvedPath));
       if (matchedMockDispatches.length === 0) {
         throw new MockNotMatchedError(`Mock dispatch not matched for path '${resolvedPath}'`);
       }
@@ -10794,9 +10794,9 @@ var require_mock_utils = __commonJS({
       }
     }
     function buildKey(opts) {
-      const { path: path11, method, body, headers, query } = opts;
+      const { path: path16, method, body, headers, query } = opts;
       return {
-        path: path11,
+        path: path16,
         method,
         body,
         headers,
@@ -11259,10 +11259,10 @@ var require_pending_interceptors_formatter = __commonJS({
       }
       format(pendingInterceptors) {
         const withPrettyHeaders = pendingInterceptors.map(
-          ({ method, path: path11, data: { statusCode }, persist, times, timesInvoked, origin }) => ({
+          ({ method, path: path16, data: { statusCode }, persist, times, timesInvoked, origin }) => ({
             Method: method,
             Origin: origin,
-            Path: path11,
+            Path: path16,
             "Status code": statusCode,
             Persistent: persist ? PERSISTENT : NOT_PERSISTENT,
             Invocations: timesInvoked,
@@ -14418,7 +14418,7 @@ var require_fetch = __commonJS({
       function dispatch({ body }) {
         const url2 = requestCurrentURL(request2);
         const agent = fetchParams.controller.dispatcher;
-        return new Promise((resolve3, reject) => agent.dispatch(
+        return new Promise((resolve5, reject) => agent.dispatch(
           {
             path: url2.pathname + url2.search,
             origin: url2.origin,
@@ -14494,7 +14494,7 @@ var require_fetch = __commonJS({
                 }
               }
               const onError = this.onError.bind(this);
-              resolve3({
+              resolve5({
                 status,
                 statusText,
                 headersList,
@@ -14540,7 +14540,7 @@ var require_fetch = __commonJS({
               for (let i = 0; i < rawHeaders.length; i += 2) {
                 headersList.append(bufferToLowerCasedHeaderName(rawHeaders[i]), rawHeaders[i + 1].toString("latin1"), true);
               }
-              resolve3({
+              resolve5({
                 status,
                 statusText: STATUS_CODES[status],
                 headersList,
@@ -16143,9 +16143,9 @@ var require_util6 = __commonJS({
         }
       }
     }
-    function validateCookiePath(path11) {
-      for (let i = 0; i < path11.length; ++i) {
-        const code = path11.charCodeAt(i);
+    function validateCookiePath(path16) {
+      for (let i = 0; i < path16.length; ++i) {
+        const code = path16.charCodeAt(i);
         if (code < 32 || // exclude CTLs (0-31)
         code > 126 || // exclude DEL and non-ascii
         code === 59) {
@@ -17217,8 +17217,8 @@ var require_connection = __commonJS({
             return;
           }
           const secWSAccept = response.headersList.get("Sec-WebSocket-Accept");
-          const digest = crypto2.createHash("sha1").update(keyValue + uid).digest("base64");
-          if (secWSAccept !== digest) {
+          const digest2 = crypto2.createHash("sha1").update(keyValue + uid).digest("base64");
+          if (secWSAccept !== digest2) {
             failWebsocketConnection(ws, "Incorrect hash received in Sec-WebSocket-Accept header.");
             return;
           }
@@ -18271,8 +18271,8 @@ var require_util8 = __commonJS({
       return true;
     }
     function delay(ms) {
-      return new Promise((resolve3) => {
-        setTimeout(resolve3, ms).unref();
+      return new Promise((resolve5) => {
+        setTimeout(resolve5, ms).unref();
       });
     }
     module2.exports = {
@@ -18987,11 +18987,11 @@ var require_undici = __commonJS({
           if (typeof opts.path !== "string") {
             throw new InvalidArgumentError("invalid opts.path");
           }
-          let path11 = opts.path;
+          let path16 = opts.path;
           if (!opts.path.startsWith("/")) {
-            path11 = `/${path11}`;
+            path16 = `/${path16}`;
           }
-          url2 = new URL(util.parseOrigin(url2).origin + path11);
+          url2 = new URL(util.parseOrigin(url2).origin + path16);
         } else {
           if (!opts) {
             opts = typeof url2 === "object" ? url2 : {};
@@ -19186,11 +19186,11 @@ var require_lib = __commonJS({
     })();
     var __awaiter4 = exports2 && exports2.__awaiter || function(thisArg, _arguments, P, generator) {
       function adopt(value) {
-        return value instanceof P ? value : new P(function(resolve3) {
-          resolve3(value);
+        return value instanceof P ? value : new P(function(resolve5) {
+          resolve5(value);
         });
       }
-      return new (P || (P = Promise))(function(resolve3, reject) {
+      return new (P || (P = Promise))(function(resolve5, reject) {
         function fulfilled(value) {
           try {
             step(generator.next(value));
@@ -19206,7 +19206,7 @@ var require_lib = __commonJS({
           }
         }
         function step(result) {
-          result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+          result.done ? resolve5(result.value) : adopt(result.value).then(fulfilled, rejected);
         }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
       });
@@ -19293,26 +19293,26 @@ var require_lib = __commonJS({
       }
       readBody() {
         return __awaiter4(this, void 0, void 0, function* () {
-          return new Promise((resolve3) => __awaiter4(this, void 0, void 0, function* () {
+          return new Promise((resolve5) => __awaiter4(this, void 0, void 0, function* () {
             let output2 = Buffer.alloc(0);
             this.message.on("data", (chunk) => {
               output2 = Buffer.concat([output2, chunk]);
             });
             this.message.on("end", () => {
-              resolve3(output2.toString());
+              resolve5(output2.toString());
             });
           }));
         });
       }
       readBodyBuffer() {
         return __awaiter4(this, void 0, void 0, function* () {
-          return new Promise((resolve3) => __awaiter4(this, void 0, void 0, function* () {
+          return new Promise((resolve5) => __awaiter4(this, void 0, void 0, function* () {
             const chunks = [];
             this.message.on("data", (chunk) => {
               chunks.push(chunk);
             });
             this.message.on("end", () => {
-              resolve3(Buffer.concat(chunks));
+              resolve5(Buffer.concat(chunks));
             });
           }));
         });
@@ -19520,14 +19520,14 @@ var require_lib = __commonJS({
        */
       requestRaw(info2, data) {
         return __awaiter4(this, void 0, void 0, function* () {
-          return new Promise((resolve3, reject) => {
+          return new Promise((resolve5, reject) => {
             function callbackForResult(err, res) {
               if (err) {
                 reject(err);
               } else if (!res) {
                 reject(new Error("Unknown error"));
               } else {
-                resolve3(res);
+                resolve5(res);
               }
             }
             this.requestRawWithCallback(info2, data, callbackForResult);
@@ -19771,12 +19771,12 @@ var require_lib = __commonJS({
         return __awaiter4(this, void 0, void 0, function* () {
           retryNumber = Math.min(ExponentialBackoffCeiling, retryNumber);
           const ms = ExponentialBackoffTimeSlice * Math.pow(2, retryNumber);
-          return new Promise((resolve3) => setTimeout(() => resolve3(), ms));
+          return new Promise((resolve5) => setTimeout(() => resolve5(), ms));
         });
       }
       _processResponse(res, options) {
         return __awaiter4(this, void 0, void 0, function* () {
-          return new Promise((resolve3, reject) => __awaiter4(this, void 0, void 0, function* () {
+          return new Promise((resolve5, reject) => __awaiter4(this, void 0, void 0, function* () {
             const statusCode = res.message.statusCode || 0;
             const response = {
               statusCode,
@@ -19784,7 +19784,7 @@ var require_lib = __commonJS({
               headers: {}
             };
             if (statusCode === HttpCodes2.NotFound) {
-              resolve3(response);
+              resolve5(response);
             }
             function dateTimeDeserializer(key, value) {
               if (typeof value === "string") {
@@ -19823,7 +19823,7 @@ var require_lib = __commonJS({
               err.result = response.result;
               reject(err);
             } else {
-              resolve3(response);
+              resolve5(response);
             }
           }));
         });
@@ -19999,11 +19999,11 @@ var import_os = require("os");
 var import_fs = require("fs");
 var __awaiter = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve3) {
-      resolve3(value);
+    return value instanceof P ? value : new P(function(resolve5) {
+      resolve5(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve3, reject) {
+  return new (P || (P = Promise))(function(resolve5, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -20019,7 +20019,7 @@ var __awaiter = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve5(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -20298,11 +20298,11 @@ var arch = import_os2.default.arch();
 // node_modules/@actions/core/lib/core.js
 var __awaiter2 = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve3) {
-      resolve3(value);
+    return value instanceof P ? value : new P(function(resolve5) {
+      resolve5(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve3, reject) {
+  return new (P || (P = Promise))(function(resolve5, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -20318,7 +20318,7 @@ var __awaiter2 = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve5(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -20398,8 +20398,8 @@ var Context = class {
       if ((0, import_fs2.existsSync)(process.env.GITHUB_EVENT_PATH)) {
         this.payload = JSON.parse((0, import_fs2.readFileSync)(process.env.GITHUB_EVENT_PATH, { encoding: "utf8" }));
       } else {
-        const path11 = process.env.GITHUB_EVENT_PATH;
-        process.stdout.write(`GITHUB_EVENT_PATH ${path11} does not exist${import_os3.EOL}`);
+        const path16 = process.env.GITHUB_EVENT_PATH;
+        process.stdout.write(`GITHUB_EVENT_PATH ${path16} does not exist${import_os3.EOL}`);
       }
     }
     this.eventName = process.env.GITHUB_EVENT_NAME;
@@ -20440,11 +20440,11 @@ var httpClient = __toESM(require_lib(), 1);
 var import_undici2 = __toESM(require_undici(), 1);
 var __awaiter3 = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
-    return value instanceof P ? value : new P(function(resolve3) {
-      resolve3(value);
+    return value instanceof P ? value : new P(function(resolve5) {
+      resolve5(value);
     });
   }
-  return new (P || (P = Promise))(function(resolve3, reject) {
+  return new (P || (P = Promise))(function(resolve5, reject) {
     function fulfilled(value) {
       try {
         step(generator.next(value));
@@ -20460,7 +20460,7 @@ var __awaiter3 = function(thisArg, _arguments, P, generator) {
       }
     }
     function step(result) {
-      result.done ? resolve3(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve5(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -25365,10 +25365,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path11) {
-  if (!path11)
+function getElementAtPath(obj, path16) {
+  if (!path16)
     return obj;
-  return path11.reduce((acc, key) => acc?.[key], obj);
+  return path16.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -25708,11 +25708,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path11, issues) {
+function prefixIssues(path16, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path11);
+    iss.path.unshift(path16);
     return iss;
   });
 }
@@ -26162,16 +26162,16 @@ function flattenError(error63, mapper = (issue3) => issue3.message) {
 }
 function formatError(error63, mapper = (issue3) => issue3.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error64, path11 = []) => {
+  const processError = (error64, path16 = []) => {
     for (const issue3 of error64.issues) {
       if (issue3.code === "invalid_union" && issue3.errors.length) {
-        issue3.errors.map((issues) => processError({ issues }, [...path11, ...issue3.path]));
+        issue3.errors.map((issues) => processError({ issues }, [...path16, ...issue3.path]));
       } else if (issue3.code === "invalid_key") {
-        processError({ issues: issue3.issues }, [...path11, ...issue3.path]);
+        processError({ issues: issue3.issues }, [...path16, ...issue3.path]);
       } else if (issue3.code === "invalid_element") {
-        processError({ issues: issue3.issues }, [...path11, ...issue3.path]);
+        processError({ issues: issue3.issues }, [...path16, ...issue3.path]);
       } else {
-        const fullpath = [...path11, ...issue3.path];
+        const fullpath = [...path16, ...issue3.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue3));
         } else {
@@ -26210,17 +26210,17 @@ function formatError(error63, mapper = (issue3) => issue3.message) {
 }
 function treeifyError(error63, mapper = (issue3) => issue3.message) {
   const result = { errors: [] };
-  const processError = (error64, path11 = []) => {
+  const processError = (error64, path16 = []) => {
     var _a3;
     for (const issue3 of error64.issues) {
       if (issue3.code === "invalid_union" && issue3.errors.length) {
-        issue3.errors.map((issues) => processError({ issues }, [...path11, ...issue3.path]));
+        issue3.errors.map((issues) => processError({ issues }, [...path16, ...issue3.path]));
       } else if (issue3.code === "invalid_key") {
-        processError({ issues: issue3.issues }, [...path11, ...issue3.path]);
+        processError({ issues: issue3.issues }, [...path16, ...issue3.path]);
       } else if (issue3.code === "invalid_element") {
-        processError({ issues: issue3.issues }, [...path11, ...issue3.path]);
+        processError({ issues: issue3.issues }, [...path16, ...issue3.path]);
       } else {
-        const fullpath = [...path11, ...issue3.path];
+        const fullpath = [...path16, ...issue3.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue3));
           continue;
@@ -26259,8 +26259,8 @@ function treeifyError(error63, mapper = (issue3) => issue3.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path11 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path11) {
+  const path16 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path16) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -29575,7 +29575,7 @@ var recursive = /* @__PURE__ */ new WeakMap();
 var NONE = 0;
 var ASSUMED = 1;
 var PROVEN = 2;
-function isRecursive(inst, stack, resolve3) {
+function isRecursive(inst, stack, resolve5) {
   const cached2 = recursive.get(inst);
   if (cached2 !== void 0)
     return cached2 ? PROVEN : NONE;
@@ -29585,7 +29585,7 @@ function isRecursive(inst, stack, resolve3) {
   let result = NONE;
   const check2 = (child) => {
     if (result !== PROVEN && child?._zod) {
-      const answer = isRecursive(child, stack, resolve3);
+      const answer = isRecursive(child, stack, resolve5);
       if (answer > result)
         result = answer;
     }
@@ -29596,7 +29596,7 @@ function isRecursive(inst, stack, resolve3) {
       const desc = Object.getOwnPropertyDescriptor(sh, key);
       if (spread && !desc.enumerable)
         continue;
-      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve3) : NONE;
+      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve5) : NONE;
       if (child > answer)
         answer = child;
     }
@@ -29660,7 +29660,7 @@ function isRecursive(inst, stack, resolve3) {
       break;
     // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
     case "lazy": {
-      const inner = def._cachedInner ?? (resolve3 ? inst._zod.innerType : void 0);
+      const inner = def._cachedInner ?? (resolve5 ? inst._zod.innerType : void 0);
       merge3(inner ? isRecursive(inner, stack, false) : ASSUMED);
       break;
     }
@@ -43362,13 +43362,13 @@ function resolveRef(ref, ctx) {
   if (!ref.startsWith("#")) {
     throw new Error("External $ref is not supported, only local refs (#/...) are allowed");
   }
-  const path11 = ref.slice(1).split("/").filter(Boolean);
-  if (path11.length === 0) {
+  const path16 = ref.slice(1).split("/").filter(Boolean);
+  if (path16.length === 0) {
     return ctx.rootSchema;
   }
   const defsKey = ctx.version === "draft-2020-12" ? "$defs" : "definitions";
-  if (path11[0] === defsKey) {
-    const key = path11[1] === void 0 ? void 0 : decodeJSONPointerSegment(path11[1]);
+  if (path16[0] === defsKey) {
+    const key = path16[1] === void 0 ? void 0 : decodeJSONPointerSegment(path16[1]);
     if (!key || !ctx.defs[key]) {
       throw new Error(`Reference not found: ${ref}`);
     }
@@ -44261,7 +44261,17 @@ var inputsSchema = external_exports.object({
   anthropicApiKey: optionalString,
   openaiApiKey: optionalString,
   forkRemoteUrl: optionalString,
-  fakeScript: optionalString
+  fakeScript: optionalString,
+  phase: external_exports.enum(["prepare", "verify", "publish", "report"]).optional(),
+  artifactDir: optionalString.optional(),
+  candidateDigest: optionalString.optional(),
+  verificationDir: optionalString.optional(),
+  verificationDigest: optionalString.optional(),
+  upstreamToken: optionalString.optional(),
+  initialBase: optionalString.optional(),
+  sandbox: boolString.optional(),
+  requireHardLimits: boolString.optional(),
+  resultsDigest: optionalString.optional()
 });
 var INPUT_NAMES = {
   upstream: "upstream",
@@ -44284,13 +44294,25 @@ var INPUT_NAMES = {
   anthropicApiKey: "anthropic_api_key",
   openaiApiKey: "openai_api_key",
   forkRemoteUrl: "fork_remote_url",
-  fakeScript: "fake_script"
+  fakeScript: "fake_script",
+  phase: "phase",
+  artifactDir: "artifact_dir",
+  candidateDigest: "candidate_digest",
+  verificationDir: "verification_dir",
+  verificationDigest: "verification_digest",
+  upstreamToken: "upstream_token",
+  initialBase: "initial_base",
+  sandbox: "sandbox",
+  requireHardLimits: "require_hard_limits",
+  resultsDigest: "results_digest"
 };
 function readRawInputs() {
   const out = {};
   for (const key of Object.keys(INPUT_NAMES)) {
     out[key] = getInput(INPUT_NAMES[key]);
   }
+  if (!out.phase) out.phase = "prepare";
+  if (out.phase !== "prepare" && !out.worker) out.worker = "fake";
   return out;
 }
 function parseInputs(raw) {
@@ -44315,7 +44337,8 @@ ${lines.join("\n")}`);
 
 // src/log.ts
 var coreLogger = {
-  info: (m) => info(m),
+  // Agent/commit text is data, including strings resembling Actions workflow commands.
+  info: (m) => m.split(/\r?\n/).forEach((line) => info(`[autopatch] ${line}`)),
   warning: (m) => warning(m),
   debug: (m) => debug(m),
   group: (name, fn) => group(name, fn)
@@ -44334,8 +44357,8 @@ async function writeResults(dir, report, rangeDiff) {
   if (rangeDiff) await fs3.writeFile(path.join(dir, "range-diff.txt"), rangeDiff);
   return file2;
 }
-function short(sha) {
-  return sha ? sha.slice(0, 12) : "\u2014";
+function short(sha2) {
+  return sha2 ? sha2.slice(0, 12) : "\u2014";
 }
 function fence(text, lang = "") {
   const ticks = text.includes("```") ? "````" : "```";
@@ -44345,7 +44368,7 @@ ${ticks}`;
 }
 function renderSummary(r, opts = { forIssue: false }) {
   const lines = [];
-  const ok = r.state === "APPROVED" || r.state === "NOTHING_TO_DO" || r.state === "FAST_FORWARDED" || r.state === "STAGED";
+  const ok = !r.state.startsWith("FAILED_");
   lines.push(`## autopatch: ${ok ? "\u2705" : "\u274C"} ${r.state}`);
   lines.push("");
   lines.push(r.reason);
@@ -44362,9 +44385,10 @@ function renderSummary(r, opts = { forIssue: false }) {
       if (plan.workflowPaths.length) lines.push(`| workflow files touched | ${plan.workflowPaths.map((p) => `\`${p}\``).join(", ")} |`);
     }
     if (r.headSha) lines.push(`| result | ${short(r.headSha)} |`);
-    if (r.tempBranch) lines.push(`| temporary branch | \`${r.tempBranch}\`${r.publish?.pushed ? " (deleted)" : ""} |`);
+    if (r.tempBranch) lines.push(`| temporary branch | \`${r.tempBranch}\`${r.publish?.pushed ? " (deleted)" : r.tempBranchRemote ? "" : " (local only)"} |`);
     if (r.publish?.backupRef) lines.push(`| backup of old tip | \`${r.publish.backupRef}\` |`);
     lines.push(`| agent calls / cost | ${r.agentCalls} / $${r.costUsd.toFixed(2)} |`);
+    if (r.unpricedCalls) lines.push(`| unpriced calls | ${r.unpricedCalls} (cost above is incomplete) |`);
     lines.push("");
   }
   if (r.outcome) {
@@ -44410,19 +44434,31 @@ function renderSummary(r, opts = { forIssue: false }) {
   if (r.leftoverBranches.length) {
     lines.push("### Leftover branches from earlier runs", "", ...r.leftoverBranches.map((b) => `- \`${b}\``), "", "These are never deleted automatically. Delete them once you no longer need them.", "");
   }
-  if (opts.forIssue && r.plan && r.tempBranch) {
+  if (r.recoveryDir && !r.tempBranchRemote) {
+    lines.push(
+      r.outcome ? "### Recover a completed candidate" : "### Resume an incomplete rebase",
+      "",
+      "Download the results artifact and restore its recovery checkpoint with the trusted recovery tool:",
+      "",
+      fence("npx tsx scripts/recover.ts /path/to/results/recovery /path/to/new-rescue-directory", "sh"),
+      "",
+      "The checkpoint includes the original history, completed resolutions, index, and pending rebase commands. Inspect git status and continue the rebase. A partial branch must not be promoted to the default branch."
+    );
+  }
+  if (opts.forIssue && r.plan && r.tempBranch && r.outcome && r.tempBranchRemote) {
     const branch = r.plan.branch;
+    const quote = (s) => `'${s.replace(/'/g, `'\\''`)}'`;
     lines.push("### How to finish by hand", "");
     lines.push("The rebased result (as far as it got) is on the temporary branch. To inspect and finish it locally:", "");
     lines.push(
       fence(
         [
-          `git fetch origin ${r.tempBranch} ${branch}`,
-          `git checkout -b autopatch-rescue origin/${r.tempBranch}`,
+          `git fetch origin ${quote(r.tempBranch)} ${quote(branch)}`,
+          `git checkout -b autopatch-rescue ${quote(`origin/${r.tempBranch}`)}`,
           `git range-diff ${r.plan.kind === "rebase" ? `${short(r.plan.base)}..origin/${branch} ${short(r.plan.upstreamSha)}..HEAD` : ""}`,
           "# fix things, then:",
-          `git push --force-with-lease=${branch}:${r.plan.branchSha} origin HEAD:${branch}`,
-          `git push origin --delete ${r.tempBranch}`
+          `git push ${quote(`--force-with-lease=${branch}:${r.plan.branchSha}`)} origin ${quote(`HEAD:${branch}`)}`,
+          `git push origin --delete ${quote(r.tempBranch)}`
         ].join("\n"),
         "sh"
       )
@@ -44433,13 +44469,13 @@ function renderSummary(r, opts = { forIssue: false }) {
 }
 
 // src/run.ts
-var fs13 = __toESM(require("node:fs/promises"), 1);
-var path10 = __toESM(require("node:path"), 1);
+var fs17 = __toESM(require("node:fs/promises"), 1);
+var path14 = __toESM(require("node:path"), 1);
 
 // src/agents/claude.ts
-var fs6 = __toESM(require("node:fs/promises"), 1);
+var fs8 = __toESM(require("node:fs/promises"), 1);
 var os5 = __toESM(require("node:os"), 1);
-var path3 = __toESM(require("node:path"), 1);
+var path5 = __toESM(require("node:path"), 1);
 
 // src/env.ts
 var PASSTHROUGH = ["PATH", "HOME", "TMPDIR", "TMP", "TEMP", "LANG", "LC_ALL", "USER", "LOGNAME", "SHELL"];
@@ -44603,6 +44639,7 @@ Answer again with a single JSON object that matches the schema exactly.`;
     throw new AutopatchError("FAILED_AGENT", `${this.o.role} (${this.label}) failed to produce valid ${call.schemaName} output twice: ${lastError}`);
   }
   async invoke(call, user, jsonSchema, attempt) {
+    this.o.budget.assertAvailable();
     this.seq += 1;
     const id = `${String(this.seq).padStart(3, "0")}-${this.o.role}-${call.schemaName}${attempt > 1 ? `-retry${attempt}` : ""}`;
     this.o.log.info(`${this.o.role} (${this.label}): ${call.schemaName}${attempt > 1 ? ` (attempt ${attempt})` : ""}`);
@@ -44626,6 +44663,7 @@ Answer again with a single JSON object that matches the schema exactly.`;
         meta: call.meta ?? {}
       });
     } catch (err) {
+      this.o.budget.record(null);
       if (err instanceof AgentTimeoutError) {
         throw new AutopatchError("FAILED_TIMEOUT", `${this.o.role} (${this.label}) ${err.message}`);
       }
@@ -44642,7 +44680,7 @@ ${result.raw}
 `);
     }
     this.o.budget.record(result.costUsd);
-    if (result.exitCode !== 0 && result.structured === void 0) {
+    if (result.exitCode !== 0) {
       throw new AutopatchError("FAILED_AGENT", `${this.o.role} (${this.label}) exited with code ${result.exitCode}: ${tail(result.raw, 2e3)}`);
     }
     return result;
@@ -44675,17 +44713,22 @@ function tail(text, maxChars) {
 async function spawnCollect(bin, args, o) {
   const sink = o.streamTo ? await fs5.open(o.streamTo, "a") : null;
   try {
-    return await new Promise((resolve3, reject) => {
+    return await new Promise((resolve5, reject) => {
       const child = (0, import_node_child_process.spawn)(bin, args, { cwd: o.cwd, env: o.env, detached: true, stdio: ["pipe", "pipe", "pipe"] });
       const out = [];
       const err = [];
+      let writes = Promise.resolve();
       child.stdout.on("data", (b) => {
         out.push(b);
-        void sink?.write(b);
+        if (sink) writes = writes.then(async () => {
+          await sink.write(b);
+        });
       });
       child.stderr.on("data", (b) => {
         err.push(b);
-        void sink?.write(b);
+        if (sink) writes = writes.then(async () => {
+          await sink.write(b);
+        });
       });
       let timedOut = false;
       const timer = setTimeout(() => {
@@ -44700,14 +44743,21 @@ async function spawnCollect(bin, args, o) {
         clearTimeout(timer);
         reject(e);
       });
-      child.on("close", (code) => {
+      child.on("close", async (code) => {
         clearTimeout(timer);
+        try {
+          await writes;
+        } catch (e) {
+          reject(e);
+          return;
+        }
         if (timedOut) {
           reject(new AgentTimeoutError(o.backendName, o.timeoutMs));
           return;
         }
-        resolve3({ code: code ?? 1, stdout: Buffer.concat(out).toString("utf8"), stderr: Buffer.concat(err).toString("utf8") });
+        resolve5({ code: code ?? 1, stdout: Buffer.concat(out).toString("utf8"), stderr: Buffer.concat(err).toString("utf8") });
       });
+      child.stdin.on("error", () => void 0);
       if (o.stdin !== void 0) child.stdin.end(o.stdin);
       else child.stdin.end();
     });
@@ -44716,14 +44766,310 @@ async function spawnCollect(bin, args, o) {
   }
 }
 async function which2(bin, env) {
-  const r = await spawnCollect("sh", ["-c", `command -v ${bin}`], { cwd: process.cwd(), env, timeoutMs: 1e4, backendName: "which" }).catch(() => null);
+  const r = await spawnCollect("sh", ["-c", 'command -v "$1"', "sh", bin], { cwd: process.cwd(), env, timeoutMs: 1e4, backendName: "which" }).catch(() => null);
   if (!r || r.code !== 0) return void 0;
   return r.stdout.trim() || void 0;
+}
+
+// src/sandbox.ts
+var fs7 = __toESM(require("node:fs/promises"), 1);
+var path4 = __toESM(require("node:path"), 1);
+
+// src/git.ts
+var import_node_child_process2 = require("node:child_process");
+var fs6 = __toESM(require("node:fs/promises"), 1);
+var path3 = __toESM(require("node:path"), 1);
+var GitError = class extends Error {
+  constructor(args, result) {
+    super(`git ${args.join(" ")} failed with code ${result.code}: ${result.stderr.trim() || result.stdout.trim()}`);
+    this.args = args;
+    this.result = result;
+    this.name = "GitError";
+  }
+  args;
+  result;
+};
+var BASE_GIT_ENV = {
+  GIT_EDITOR: "true",
+  GIT_SEQUENCE_EDITOR: "true",
+  GIT_MERGE_AUTOEDIT: "no",
+  GIT_TERMINAL_PROMPT: "0",
+  GIT_PAGER: "cat",
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_LITERAL_PATHSPECS: "1",
+  GIT_OPTIONAL_LOCKS: "0",
+  LC_ALL: "C"
+};
+var BOT_IDENTITY = {
+  name: "autopatch[bot]",
+  email: "autopatch@users.noreply.github.com"
+};
+function baseEnvFromProcess() {
+  const keep = ["PATH", "HOME", "TMPDIR", "TMP", "TEMP", "LANG", "SSH_AUTH_SOCK", "XDG_CONFIG_HOME"];
+  const out = {};
+  for (const k of keep) {
+    const v = process.env[k];
+    if (v !== void 0) out[k] = v;
+  }
+  return out;
+}
+var Git = class _Git {
+  cwd;
+  config;
+  env;
+  constructor(cwd, options = {}) {
+    this.cwd = cwd;
+    this.config = {
+      "user.name": BOT_IDENTITY.name,
+      "user.email": BOT_IDENTITY.email,
+      "commit.gpgsign": "false",
+      "tag.gpgsign": "false",
+      "core.hooksPath": "/dev/null",
+      "advice.detachedHead": "false",
+      "advice.skippedCherryPicks": "false",
+      "advice.mergeConflict": "false",
+      "core.autocrlf": "false",
+      "color.ui": "never",
+      "maintenance.auto": "false",
+      "gc.auto": "0",
+      "core.fsmonitor": "false",
+      "protocol.ext.allow": "never",
+      ...options.config
+    };
+    this.env = { ...baseEnvFromProcess(), ...BASE_GIT_ENV, ...options.env };
+  }
+  /** A Git bound to another directory with the same config and env. */
+  at(cwd) {
+    return new _Git(cwd, { config: this.config, env: this.env });
+  }
+  withConfig(config2) {
+    return new _Git(this.cwd, { config: { ...this.config, ...config2 }, env: this.env });
+  }
+  async run(args, options = {}) {
+    const configArgs = [];
+    for (const [k, v] of Object.entries(this.config)) configArgs.push("-c", `${k}=${v}`);
+    const commandArgs = ["diff", "show", "log", "range-diff"].includes(args[0] ?? "") ? [args[0], "--no-ext-diff", "--no-textconv", ...args.slice(1)] : args;
+    const fullArgs = [...configArgs, ...commandArgs];
+    const result = await new Promise((resolve5) => {
+      const child = (0, import_node_child_process2.execFile)(
+        "git",
+        fullArgs,
+        {
+          cwd: options.cwd ?? this.cwd,
+          env: { ...this.env, ...options.env },
+          maxBuffer: 256 * 1024 * 1024,
+          encoding: "utf8",
+          timeout: options.timeoutMs ?? 5 * 6e4,
+          killSignal: "SIGKILL"
+        },
+        (err, stdout, stderr) => {
+          const code = err && typeof err.code === "number" ? err.code : err ? 128 : 0;
+          resolve5({ code, stdout: String(stdout), stderr: String(stderr) });
+        }
+      );
+      child.stdin?.on("error", () => void 0);
+      child.stdin?.end(options.input);
+    });
+    if (result.code !== 0 && !options.allowFailure) {
+      throw new GitError(args, result);
+    }
+    return result;
+  }
+  /** Run and return trimmed stdout. */
+  async out(args, options = {}) {
+    return (await this.run(args, options)).stdout.trim();
+  }
+  /** Run and return non-empty stdout lines. */
+  async lines(args, options = {}) {
+    return (await this.run(args, options)).stdout.split("\n").filter((l) => l.length > 0);
+  }
+  async paths(args) {
+    return (await this.run(args)).stdout.split("\0").filter(Boolean);
+  }
+  async tree(ref = "HEAD") {
+    return this.out(["rev-parse", "--verify", `${ref}^{tree}`]);
+  }
+  async commonDir() {
+    return path3.resolve(this.cwd, await this.out(["rev-parse", "--git-common-dir"]));
+  }
+  async requireSupportedVersion() {
+    const version2 = await this.out(["--version"]);
+    const match = /git version (\d+)\.(\d+)/.exec(version2);
+    if (!match || Number(match[1]) < 2 || Number(match[1]) === 2 && Number(match[2]) < 45) {
+      throw new Error(`Git 2.45 or newer is required (--empty=stop); found ${version2}`);
+    }
+  }
+  async authenticated(token, remote = "origin") {
+    const url2 = await this.remoteUrl(remote);
+    return token && url2?.startsWith("https://") ? this.withConfig(authExtraHeader(token, url2)) : this;
+  }
+  async revParse(ref) {
+    return this.out(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
+  }
+  async tryRevParse(ref) {
+    const r = await this.run(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], { allowFailure: true });
+    return r.code === 0 ? r.stdout.trim() : void 0;
+  }
+  async gitDir() {
+    return path3.resolve(this.cwd, await this.out(["rev-parse", "--git-dir"]));
+  }
+  async gitPath(name) {
+    return path3.resolve(this.cwd, await this.out(["rev-parse", "--git-path", name]));
+  }
+  async isShallow() {
+    return await this.out(["rev-parse", "--is-shallow-repository"]) === "true";
+  }
+  async mergeBases(a, b) {
+    const r = await this.run(["merge-base", "--all", a, b], { allowFailure: true });
+    if (r.code === 1) return [];
+    if (r.code !== 0) throw new GitError(["merge-base", "--all", a, b], r);
+    return r.stdout.split("\n").filter(Boolean);
+  }
+  async isAncestor(ancestor, descendant) {
+    const r = await this.run(["merge-base", "--is-ancestor", ancestor, descendant], { allowFailure: true });
+    if (r.code === 0) return true;
+    if (r.code === 1) return false;
+    throw new GitError(["merge-base", "--is-ancestor", ancestor, descendant], r);
+  }
+  async revListCount(range) {
+    return Number(await this.out(["rev-list", "--count", range]));
+  }
+  /** Resolve the default branch of a remote via its symbolic HEAD. */
+  async remoteDefaultBranch(remote) {
+    const r = await this.run(["ls-remote", "--symref", remote, "HEAD"], { allowFailure: true });
+    if (r.code !== 0) return void 0;
+    const m = /^ref: refs\/heads\/(\S+)\tHEAD$/m.exec(r.stdout);
+    return m?.[1];
+  }
+  async remoteUrl(remote) {
+    const r = await this.run(["remote", "get-url", remote], { allowFailure: true });
+    return r.code === 0 ? r.stdout.trim() : void 0;
+  }
+  async ensureRemote(name, url2) {
+    const existing = await this.remoteUrl(name);
+    if (existing === void 0) {
+      await this.run(["remote", "add", name, url2]);
+    } else if (existing !== url2) {
+      await this.run(["remote", "set-url", name, url2]);
+    }
+  }
+  /** Unmerged index entries grouped by path with the stages present (1=base, 2=ours, 3=theirs). */
+  async unmergedPaths() {
+    const out = /* @__PURE__ */ new Map();
+    const raw = (await this.run(["ls-files", "-u", "-z"])).stdout;
+    for (const rec of raw.split("\0")) {
+      if (!rec) continue;
+      const m = /^\d+ [0-9a-f]+ ([123])\t([\s\S]*)$/.exec(rec);
+      if (!m) continue;
+      const stage = Number(m[1]);
+      const p = m[2];
+      const set2 = out.get(p) ?? /* @__PURE__ */ new Set();
+      set2.add(stage);
+      out.set(p, set2);
+    }
+    return out;
+  }
+  async statusPorcelain() {
+    return this.paths(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"]);
+  }
+  async indexIsEmpty() {
+    const r = await this.run(["diff", "--cached", "--quiet"], { allowFailure: true });
+    if (r.code === 0) return true;
+    if (r.code === 1) return false;
+    throw new GitError(["diff", "--cached", "--quiet"], r);
+  }
+  async worktreeAdd(dir, commitish) {
+    await fs6.mkdir(path3.dirname(dir), { recursive: true });
+    await this.run(["worktree", "add", "--detach", dir, commitish]);
+    return this.at(dir);
+  }
+  async worktreeRemove(dir) {
+    await this.run(["worktree", "remove", "--force", dir], { allowFailure: true });
+    await this.run(["worktree", "prune"], { allowFailure: true });
+  }
+};
+function repoUrl(spec, host = "https://github.com") {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(spec) || spec.startsWith("git@") || spec.startsWith("/") || spec.startsWith("file:")) {
+    return spec;
+  }
+  const trimmed = spec.replace(/\.git$/, "");
+  return `${host}/${trimmed}.git`;
+}
+function authExtraHeader(token, remoteUrl = "https://github.com/") {
+  const url2 = new URL(remoteUrl);
+  if (url2.protocol !== "https:" || url2.username || url2.password) throw new Error("authentication requires a credential-free HTTPS URL");
+  const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
+  return { [`http.${url2.origin}${url2.pathname.replace(/\/$/, "")}/.extraheader`]: `AUTHORIZATION: basic ${basic}` };
+}
+
+// src/sandbox.ts
+async function sandboxCommand(bin, args, cwd, mode, env, writable = []) {
+  if (process.platform !== "linux") throw new Error("sandbox=true requires Linux with bubblewrap; use sandbox=false only for trusted local testing");
+  const bwrap = await which2("bwrap", env);
+  if (!bwrap) throw new Error("bubblewrap is required: install it before running the action");
+  const executable = await which2(bin, env);
+  if (!executable) throw new Error(`executable not found: ${bin}`);
+  const realBin = await fs7.realpath(executable);
+  const git = new Git(cwd);
+  const common = await git.commonDir();
+  const gitFile = path4.join(cwd, ".git");
+  const home = "/tmp/autopatch-home";
+  const sandboxArgs = [
+    "--die-with-parent",
+    "--new-session",
+    "--unshare-user",
+    "--unshare-pid",
+    "--unshare-ipc",
+    "--unshare-uts",
+    "--cap-drop",
+    "ALL",
+    "--ro-bind",
+    "/",
+    "/",
+    "--proc",
+    "/proc",
+    "--dev",
+    "/dev",
+    "--tmpfs",
+    "/tmp",
+    "--tmpfs",
+    "/run",
+    "--tmpfs",
+    "/home",
+    "--tmpfs",
+    "/root",
+    "--dir",
+    home,
+    mode === "edit" ? "--bind" : "--ro-bind",
+    cwd,
+    cwd,
+    "--ro-bind",
+    common,
+    common
+  ];
+  if (gitFile !== common) sandboxArgs.push("--ro-bind", gitFile, gitFile);
+  if (realBin.startsWith("/home/") || realBin.startsWith("/root/") || realBin.startsWith("/tmp/")) {
+    sandboxArgs.push("--ro-bind", path4.dirname(realBin), path4.dirname(realBin));
+  }
+  for (const dir of writable) sandboxArgs.push("--bind", dir, dir);
+  sandboxArgs.push("--chdir", cwd, "--", realBin, ...args);
+  return { bin: bwrap, args: sandboxArgs, env: {
+    ...env,
+    HOME: home,
+    TMPDIR: "/tmp",
+    TMP: "/tmp",
+    TEMP: "/tmp",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_OPTIONAL_LOCKS: "0"
+  } };
 }
 
 // src/agents/claude.ts
 var READ_ONLY_GIT = ["diff", "show", "log", "blame", "grep", "ls-files", "status", "rev-parse", "cat-file", "range-diff"];
 var CLAUDE_INSTALL_URL = "https://claude.ai/install.sh";
+var CLAUDE_VERSION = "2.1.288";
 var ClaudeBackend = class {
   constructor(o) {
     this.o = o;
@@ -44731,27 +45077,44 @@ var ClaudeBackend = class {
   }
   o;
   name = "claude";
+  capabilities = { turnLimit: true, budgetLimit: true, costReporting: true };
+  version;
   bin;
   async ensureInstalled(install) {
     const env = buildChildEnv();
-    if (await which2(this.bin, env)) return;
+    if (await which2(this.bin, env)) {
+      await this.checkVersion(env);
+      return;
+    }
     if (!install) throw new Error(`"${this.bin}" is not on PATH and install_clis is false`);
-    this.o.log.info(`installing Claude Code (${this.o.installVersion ?? "stable"})`);
-    const r = await spawnCollect("sh", ["-c", `curl -fsSL ${CLAUDE_INSTALL_URL} | bash -s ${this.o.installVersion ?? "stable"}`], {
+    const version2 = this.o.installVersion ?? CLAUDE_VERSION;
+    if (!/^\d+\.\d+\.\d+$/.test(version2)) throw new Error("Claude version must be an exact semver");
+    this.o.log.info(`installing Claude Code (${version2})`);
+    const r = await spawnCollect("bash", ["-o", "pipefail", "-c", 'curl -fsSL "$1" | bash -s "$2"', "bash", CLAUDE_INSTALL_URL, version2], {
       cwd: os5.tmpdir(),
       env,
       timeoutMs: 5 * 6e4,
       backendName: this.name
     });
     if (r.code !== 0) throw new Error(`Claude Code install failed: ${r.stderr.trim() || r.stdout.trim()}`);
-    const local = path3.join(env.HOME ?? os5.homedir(), ".local", "bin", "claude");
-    if (await which2(this.bin, env)) return;
+    const local = path5.join(env.HOME ?? os5.homedir(), ".local", "bin", "claude");
+    if (await which2(this.bin, env)) {
+      await this.checkVersion(env);
+      return;
+    }
     try {
-      await fs6.access(local);
+      await fs8.access(local);
       this.bin = local;
     } catch {
       throw new Error('Claude Code installed but the "claude" binary was not found on PATH or in ~/.local/bin');
     }
+    await this.checkVersion(env);
+  }
+  async checkVersion(env) {
+    const result = await spawnCollect(this.bin, ["--version"], { cwd: os5.tmpdir(), env, timeoutMs: 1e4, backendName: this.name });
+    this.version = result.stdout.trim();
+    const expected = this.o.installVersion ?? CLAUDE_VERSION;
+    if (result.code !== 0 || this.version.match(/\d+\.\d+\.\d+/)?.[0] !== expected) throw new Error(`expected Claude Code ${expected}, found ${this.version}`);
   }
   buildArgs(opts) {
     const args = [
@@ -44787,7 +45150,7 @@ var ClaudeBackend = class {
     return args;
   }
   async run(prompt, opts) {
-    const configDir = await fs6.mkdtemp(path3.join(os5.tmpdir(), "autopatch-claude-"));
+    const configDir = await fs8.mkdtemp(path5.join(os5.tmpdir(), "autopatch-claude-"));
     try {
       const env = {
         ...opts.env,
@@ -44797,9 +45160,11 @@ var ClaudeBackend = class {
         CLAUDE_CONFIG_DIR: configDir
       };
       if (!env.ANTHROPIC_API_KEY) throw new Error("claude backend needs ANTHROPIC_API_KEY (anthropic_api_key input)");
-      const r = await spawnCollect(this.bin, this.buildArgs(opts), {
+      const args = this.buildArgs(opts);
+      const launch = this.o.sandbox ? await sandboxCommand(this.bin, args, opts.cwd, opts.mode, env, [configDir]) : { bin: this.bin, args, env };
+      const r = await spawnCollect(launch.bin, launch.args, {
         cwd: opts.cwd,
-        env,
+        env: launch.env,
         stdin: prompt,
         timeoutMs: opts.timeoutMs,
         backendName: this.name,
@@ -44807,7 +45172,7 @@ var ClaudeBackend = class {
       });
       return parseClaudeOutput(r.stdout, r.stderr, r.code);
     } finally {
-      await fs6.rm(configDir, { recursive: true, force: true });
+      await fs8.rm(configDir, { recursive: true, force: true });
     }
   }
 };
@@ -44841,9 +45206,10 @@ ${stderr}` : stdout,
 }
 
 // src/agents/codex.ts
-var fs7 = __toESM(require("node:fs/promises"), 1);
+var fs9 = __toESM(require("node:fs/promises"), 1);
 var os6 = __toESM(require("node:os"), 1);
-var path4 = __toESM(require("node:path"), 1);
+var path6 = __toESM(require("node:path"), 1);
+var CODEX_VERSION = "0.160.0";
 var CodexBackend = class {
   constructor(o) {
     this.o = o;
@@ -44851,12 +45217,17 @@ var CodexBackend = class {
   }
   o;
   name = "codex";
+  capabilities = { turnLimit: false, budgetLimit: false, costReporting: false };
+  version;
   bin;
   async ensureInstalled(install) {
     const env = buildChildEnv();
-    if (await which2(this.bin, env)) return;
+    if (await which2(this.bin, env)) {
+      await this.checkVersion(env);
+      return;
+    }
     if (!install) throw new Error(`"${this.bin}" is not on PATH and install_clis is false`);
-    const spec = `@openai/codex@${this.o.installVersion ?? "latest"}`;
+    const spec = `@openai/codex@${this.o.installVersion ?? CODEX_VERSION}`;
     this.o.log.info(`installing ${spec}`);
     const r = await spawnCollect("npm", ["install", "-g", "--no-fund", "--no-audit", spec], {
       cwd: os6.tmpdir(),
@@ -44866,6 +45237,13 @@ var CodexBackend = class {
     });
     if (r.code !== 0) throw new Error(`codex install failed: ${r.stderr.trim() || r.stdout.trim()}`);
     if (!await which2(this.bin, env)) throw new Error("codex installed but not found on PATH");
+    await this.checkVersion(env);
+  }
+  async checkVersion(env) {
+    const result = await spawnCollect(this.bin, ["--version"], { cwd: os6.tmpdir(), env, timeoutMs: 1e4, backendName: this.name });
+    this.version = result.stdout.trim();
+    const expected = this.o.installVersion ?? CODEX_VERSION;
+    if (result.code !== 0 || this.version.match(/\d+\.\d+\.\d+/)?.[0] !== expected) throw new Error(`expected Codex ${expected}, found ${this.version}`);
   }
   buildArgs(opts, schemaFile, lastMessageFile) {
     const args = [
@@ -44897,28 +45275,30 @@ var CodexBackend = class {
     return args;
   }
   async run(prompt, opts) {
-    const tmp = await fs7.mkdtemp(path4.join(os6.tmpdir(), "autopatch-codex-"));
+    const tmp = await fs9.mkdtemp(path6.join(os6.tmpdir(), "autopatch-codex-"));
     try {
-      const schemaFile = path4.join(tmp, "schema.json");
-      const lastMessageFile = path4.join(tmp, "last-message.txt");
-      const codexHome = path4.join(tmp, "home");
-      await fs7.mkdir(codexHome);
-      await fs7.writeFile(schemaFile, JSON.stringify(opts.jsonSchema));
+      const schemaFile = path6.join(tmp, "schema.json");
+      const lastMessageFile = path6.join(tmp, "last-message.txt");
+      const codexHome = path6.join(tmp, "home");
+      await fs9.mkdir(codexHome);
+      await fs9.writeFile(schemaFile, JSON.stringify(opts.jsonSchema));
       const apiKey = opts.env.CODEX_API_KEY ?? opts.env.OPENAI_API_KEY;
       if (!apiKey) throw new Error("codex backend needs OPENAI_API_KEY (openai_api_key input)");
       const env = { ...opts.env, CODEX_API_KEY: apiKey, OPENAI_API_KEY: apiKey, CODEX_HOME: codexHome };
-      const r = await spawnCollect(this.bin, this.buildArgs(opts, schemaFile, lastMessageFile), {
+      const args = this.buildArgs(opts, schemaFile, lastMessageFile);
+      const launch = this.o.sandbox ? await sandboxCommand(this.bin, args, opts.cwd, opts.mode, env, [tmp]) : { bin: this.bin, args, env };
+      const r = await spawnCollect(launch.bin, launch.args, {
         cwd: opts.cwd,
-        env,
+        env: launch.env,
         stdin: composePrompt(opts.systemPrompt, prompt),
         timeoutMs: opts.timeoutMs,
         backendName: this.name,
         streamTo: opts.transcriptPath
       });
-      const lastMessage = await fs7.readFile(lastMessageFile, "utf8").catch(() => "");
+      const lastMessage = await fs9.readFile(lastMessageFile, "utf8").catch(() => "");
       return parseCodexOutput(r.stdout, r.stderr, r.code, lastMessage);
     } finally {
-      await fs7.rm(tmp, { recursive: true, force: true });
+      await fs9.rm(tmp, { recursive: true, force: true });
     }
   }
 };
@@ -44946,7 +45326,7 @@ function parseCodexOutput(stdout, stderr, code, lastMessage) {
     }
     if (ev.type === "item.completed" && ev.item?.type === "agent_message") {
       turns += 1;
-      if (!text && ev.item.text) text = ev.item.text.trim();
+      if (!lastMessage.trim() && ev.item.text) text = ev.item.text.trim();
     }
     if (ev.type === "error" || ev.type === "turn.failed") sawError = true;
   }
@@ -44972,9 +45352,9 @@ ${stderr}` : stdout,
 }
 
 // src/agents/fake.ts
-var import_node_child_process2 = require("node:child_process");
-var fs8 = __toESM(require("node:fs/promises"), 1);
-var path5 = __toESM(require("node:path"), 1);
+var import_node_child_process3 = require("node:child_process");
+var fs10 = __toESM(require("node:fs/promises"), 1);
+var path7 = __toESM(require("node:path"), 1);
 var FakeBackend = class {
   constructor(scriptPath, script) {
     this.scriptPath = scriptPath;
@@ -44982,6 +45362,7 @@ var FakeBackend = class {
   }
   scriptPath;
   name = "fake";
+  capabilities = { turnLimit: true, budgetLimit: true, costReporting: true };
   script;
   counters = {};
   calls = [];
@@ -44990,7 +45371,7 @@ var FakeBackend = class {
   async load() {
     if (this.script) return this.script;
     if (!this.scriptPath) throw new Error("fake backend needs fake_script or an inline script");
-    this.script = JSON.parse(await fs8.readFile(this.scriptPath, "utf8"));
+    this.script = JSON.parse(await fs10.readFile(this.scriptPath, "utf8"));
     return this.script;
   }
   next(kind) {
@@ -45071,27 +45452,27 @@ var FakeBackend = class {
     const files = [];
     const conflicted = (opts.meta.conflictedPaths ?? "").split("\n").filter(Boolean);
     for (const [rel, spec] of Object.entries(step.files ?? {})) {
-      const abs = path5.join(opts.cwd, rel);
+      const abs = path7.join(opts.cwd, rel);
       if (typeof spec === "string") {
-        await fs8.mkdir(path5.dirname(abs), { recursive: true });
+        await fs10.mkdir(path7.dirname(abs), { recursive: true });
         let content = spec;
         if (step.leaveMarkers && files.length === 0) content = `<<<<<<< HEAD
 ${content}=======
 >>>>>>> patch
 `;
-        await fs8.writeFile(abs, content);
+        await fs10.writeFile(abs, content);
         files.push({ path: rel, action: conflicted.includes(rel) ? "edited" : "created", rationale: "scripted" });
       } else if (spec.action === "delete") {
-        await fs8.rm(abs, { force: true });
+        await fs10.rm(abs, { force: true });
         files.push({ path: rel, action: "deleted", rationale: "scripted" });
       } else {
         files.push({ path: rel, action: spec.action, rationale: "scripted" });
       }
     }
     for (const [rel, content] of Object.entries(step.extraFiles ?? {})) {
-      const abs = path5.join(opts.cwd, rel);
-      await fs8.mkdir(path5.dirname(abs), { recursive: true });
-      await fs8.writeFile(abs, content);
+      const abs = path7.join(opts.cwd, rel);
+      await fs10.mkdir(path7.dirname(abs), { recursive: true });
+      await fs10.writeFile(abs, content);
     }
     if (step.hook) await this.runHook(step.hook, opts.cwd);
     return {
@@ -45106,20 +45487,20 @@ ${content}=======
   async applyFiles(cwd, files) {
     const changed = [];
     for (const [rel, spec] of Object.entries(files)) {
-      const abs = path5.join(cwd, rel);
+      const abs = path7.join(cwd, rel);
       if (typeof spec === "string") {
-        await fs8.mkdir(path5.dirname(abs), { recursive: true });
-        await fs8.writeFile(abs, spec);
+        await fs10.mkdir(path7.dirname(abs), { recursive: true });
+        await fs10.writeFile(abs, spec);
       } else {
-        await fs8.rm(abs, { force: true });
+        await fs10.rm(abs, { force: true });
       }
       changed.push(rel);
     }
     return changed;
   }
   runHook(cmd, cwd) {
-    return new Promise((resolve3, reject) => {
-      (0, import_node_child_process2.execFile)("sh", ["-c", cmd], { cwd }, (err) => err ? reject(err) : resolve3());
+    return new Promise((resolve5, reject) => {
+      (0, import_node_child_process3.execFile)("sh", ["-c", cmd], { cwd }, (err) => err ? reject(err) : resolve5());
     });
   }
 };
@@ -45128,9 +45509,9 @@ ${content}=======
 function createBackend(name, inputs, log) {
   switch (name) {
     case "claude":
-      return new ClaudeBackend({ log });
+      return new ClaudeBackend({ log, sandbox: inputs.sandbox ?? false });
     case "codex":
-      return new CodexBackend({ log });
+      return new CodexBackend({ log, sandbox: inputs.sandbox ?? false });
     case "fake":
       return new FakeBackend(inputs.fakeScript);
   }
@@ -45156,12 +45537,16 @@ var Budget = class {
   calls = 0;
   /** Calls whose backend reported no cost; time limits are the backstop for those. */
   unpricedCalls = 0;
+  assertAvailable() {
+    if (this.spentUsd >= this.maxUsd) throw new AutopatchError("FAILED_BUDGET", `reported budget exhausted ($${this.spentUsd.toFixed(2)} of $${this.maxUsd.toFixed(2)})`);
+  }
   record(costUsd) {
     this.calls += 1;
     if (costUsd === null) {
       this.unpricedCalls += 1;
       return;
     }
+    if (!Number.isFinite(costUsd) || costUsd < 0) throw new AutopatchError("FAILED_AGENT", "backend returned an invalid cost");
     this.spentUsd += costUsd;
     if (this.spentUsd > this.maxUsd) {
       throw new AutopatchError(
@@ -45172,14 +45557,210 @@ var Budget = class {
   }
 };
 
+// src/candidate.ts
+var import_node_crypto2 = require("node:crypto");
+var import_node_fs = require("node:fs");
+var fs12 = __toESM(require("node:fs/promises"), 1);
+var path9 = __toESM(require("node:path"), 1);
+
+// src/state.ts
+var import_node_crypto = require("node:crypto");
+var fs11 = __toESM(require("node:fs/promises"), 1);
+var path8 = __toESM(require("node:path"), 1);
+async function candidateIdentity(git) {
+  return { headSha: await git.revParse("HEAD"), treeSha: await git.tree() };
+}
+async function hashPath(p) {
+  const st = await fs11.lstat(p).catch(() => null);
+  if (!st) return null;
+  if (st.isSymbolicLink()) return `link:${await fs11.readlink(p)}`;
+  if (st.isDirectory()) {
+    const entries = await fs11.readdir(p);
+    return JSON.stringify(await Promise.all(entries.sort().map(async (n) => [n, await hashPath(path8.join(p, n))])));
+  }
+  return (0, import_node_crypto.createHash)("sha256").update(await fs11.readFile(p)).digest("hex");
+}
+async function gitState(git) {
+  const common = await git.commonDir();
+  const metadata = ["HEAD", "REBASE_HEAD", "ORIG_HEAD", "MERGE_HEAD", "CHERRY_PICK_HEAD", "rebase-merge", "rebase-apply", "sequencer"];
+  return JSON.stringify({
+    head: await git.out(["rev-parse", "HEAD"]),
+    refs: await git.out(["for-each-ref", "--format=%(refname) %(objectname)"]),
+    index: (await git.run(["ls-files", "--stage", "-v", "-z"])).stdout,
+    metadata: await Promise.all(metadata.map(async (n) => [n, await hashPath(await git.gitPath(n))])),
+    config: await hashPath(path8.join(common, "config")),
+    worktreeConfig: await hashPath(await git.gitPath("config.worktree")),
+    gitFile: (await fs11.lstat(path8.join(git.cwd, ".git"))).isDirectory() ? null : await hashPath(path8.join(git.cwd, ".git"))
+  });
+}
+async function guardGit(git, mode, label, call) {
+  const before = await gitState(git);
+  const beforeDiff = mode === "readonly" ? (await git.run(["diff", "--binary", "--no-ext-diff", "--no-textconv"])).stdout : null;
+  const beforeStatus = mode === "readonly" ? await git.statusPorcelain() : null;
+  try {
+    return await call();
+  } finally {
+    try {
+      if (await gitState(git) !== before) throw new AutopatchError("FAILED_TAMPERED", `${label} changed Git metadata or the index`);
+      if (mode === "readonly" && (JSON.stringify(await git.statusPorcelain()) !== JSON.stringify(beforeStatus) || (await git.run(["diff", "--binary", "--no-ext-diff", "--no-textconv"])).stdout !== beforeDiff)) {
+        throw new AutopatchError("FAILED_TAMPERED", `${label} changed the worktree during a read-only operation`);
+      }
+    } catch (e) {
+      if (e instanceof AutopatchError) throw e;
+      throw new AutopatchError("FAILED_TAMPERED", `${label} left Git state unreadable`, [e instanceof Error ? e.message : String(e)]);
+    }
+  }
+}
+async function assertCandidate(git, expected) {
+  const current = await candidateIdentity(git);
+  if (current.headSha !== expected.headSha || current.treeSha !== expected.treeSha || (await git.statusPorcelain()).length) {
+    throw new AutopatchError("FAILED_TAMPERED", "candidate changed after verification or approval");
+  }
+}
+async function validateFilePath(root, rel) {
+  if (!rel || path8.isAbsolute(rel) || rel.includes("\0") || rel.split("/").some((p) => !p || p === "." || p === ".." || p.toLowerCase() === ".git")) {
+    throw new AutopatchError("FAILED_AGENT", `invalid file path: ${JSON.stringify(rel)}`);
+  }
+  const parts = rel.split("/");
+  for (let i = 1; i <= parts.length; i++) {
+    const st = await fs11.lstat(path8.join(root, ...parts.slice(0, i))).catch((e) => {
+      if (e.code === "ENOENT") return null;
+      throw e;
+    });
+    if (st && (i < parts.length ? !st.isDirectory() : st.isDirectory())) {
+      throw new AutopatchError("FAILED_AGENT", `file path traverses a symlink or names a directory: ${JSON.stringify(rel)}`);
+    }
+  }
+}
+
+// src/candidate.ts
+var sha = external_exports.string().regex(/^[0-9a-f]{40}$/);
+var digest = external_exports.string().regex(/^[0-9a-f]{64}$/);
+var candidateSchema = external_exports.object({
+  version: external_exports.literal(1),
+  runId: external_exports.string(),
+  runAttempt: external_exports.string(),
+  repository: external_exports.string(),
+  upstream: external_exports.string(),
+  branch: external_exports.string(),
+  upstreamBranch: external_exports.string(),
+  originalSha: sha,
+  upstreamSha: sha,
+  baseSha: sha,
+  checkpointSha: sha.nullable(),
+  headSha: sha,
+  treeSha: sha,
+  bundleDigest: digest,
+  kind: external_exports.enum(["rebase", "fast_forward"]),
+  autoEligible: external_exports.boolean(),
+  verifyCommand: external_exports.string().nullable(),
+  patches: external_exports.array(external_exports.object({ original: sha, current: sha.nullable(), result: external_exports.enum(["applied", "rerere", "absorbed", "became_empty", "skipped"]) }).strict()).max(1e4)
+}).strict();
+var verificationSchema = external_exports.object({
+  version: external_exports.literal(1),
+  runId: external_exports.string(),
+  runAttempt: external_exports.string(),
+  candidateDigest: digest,
+  headSha: sha,
+  treeSha: sha,
+  verifyCommand: external_exports.string().nullable(),
+  passed: external_exports.literal(true)
+}).strict();
+async function fileDigest(file2) {
+  if (!(await fs12.lstat(file2)).isFile()) throw new Error(`artifact must be a regular file: ${file2}`);
+  const hash2 = (0, import_node_crypto2.createHash)("sha256");
+  for await (const chunk of (0, import_node_fs.createReadStream)(file2)) hash2.update(chunk);
+  return hash2.digest("hex");
+}
+async function readBoundJson(file2, expected) {
+  if (!/^[0-9a-f]{64}$/.test(expected)) throw new AutopatchError("FAILED_GATE", "the producing job must supply the artifact SHA-256 digest");
+  if ((await fs12.lstat(file2)).size > 5 * 1024 * 1024) throw new Error("artifact manifest is too large");
+  if (await fileDigest(file2) !== expected) throw new AutopatchError("FAILED_TAMPERED", "artifact digest differs from the producing job output");
+  return JSON.parse(await fs12.readFile(file2, "utf8"));
+}
+async function writeCandidate(git, directory, plan, outcome, metadata) {
+  const identity = await candidateIdentity(git);
+  await assertCandidate(git, { headSha: outcome.headSha, treeSha: identity.treeSha });
+  await fs12.mkdir(directory, { recursive: true });
+  const refs = { original: plan.branchSha, upstream: plan.upstreamSha, base: plan.base, head: identity.headSha };
+  for (const [name, value] of Object.entries(refs)) await git.run(["update-ref", `refs/autopatch/candidate/${name}`, value]);
+  const bundle = path9.join(directory, "candidate.bundle");
+  await git.run(["bundle", "create", bundle, ...Object.keys(refs).map((n) => `refs/autopatch/candidate/${n}`)]);
+  const candidate = candidateSchema.parse({
+    version: 1,
+    ...metadata,
+    ...identity,
+    branch: plan.branch,
+    upstreamBranch: plan.upstreamBranch,
+    originalSha: plan.branchSha,
+    upstreamSha: plan.upstreamSha,
+    baseSha: plan.base,
+    bundleDigest: await fileDigest(bundle),
+    patches: outcome.records.map((r) => ({ original: r.sha, current: r.newSha, result: r.result }))
+  });
+  const file2 = path9.join(directory, "candidate.json");
+  await fs12.writeFile(file2, JSON.stringify(candidate, null, 2));
+  return fileDigest(file2);
+}
+async function importCandidate(directory, expectedDigest, destination, bare = false) {
+  const candidate = candidateSchema.parse(await readBoundJson(path9.join(directory, "candidate.json"), expectedDigest));
+  const bundle = path9.resolve(directory, "candidate.bundle");
+  if (await fileDigest(bundle) !== candidate.bundleDigest) throw new AutopatchError("FAILED_TAMPERED", "candidate bundle digest mismatch");
+  await fs12.mkdir(destination, { recursive: true });
+  if ((await fs12.readdir(destination)).length) throw new Error("candidate import requires an empty directory");
+  const git = new Git(destination);
+  await git.run(["init", "-q", ...bare ? ["--bare"] : []]);
+  for (const branch of [candidate.branch, candidate.upstreamBranch]) await git.run(["check-ref-format", "--branch", branch]);
+  const refs = { original: candidate.originalSha, upstream: candidate.upstreamSha, base: candidate.baseSha, head: candidate.headSha };
+  const expectedHeads = Object.entries(refs).map(([name, value]) => `${value} refs/autopatch/candidate/${name}`).sort();
+  const heads = (await git.lines(["bundle", "list-heads", bundle])).sort();
+  if (JSON.stringify(heads) !== JSON.stringify(expectedHeads)) throw new AutopatchError("FAILED_TAMPERED", "unexpected refs in candidate bundle");
+  await git.run(["bundle", "verify", bundle]);
+  await git.run(["fetch", "--no-tags", bundle, ...Object.keys(refs).map((n) => `refs/autopatch/candidate/${n}:refs/autopatch/candidate/${n}`)]);
+  if (await git.tree(candidate.headSha) !== candidate.treeSha || !await git.isAncestor(candidate.upstreamSha, candidate.headSha)) {
+    throw new AutopatchError("FAILED_GATE", "candidate tree or upstream ancestry is invalid");
+  }
+  const bases = await git.mergeBases(candidate.originalSha, candidate.upstreamSha);
+  if (bases.length !== 1 || bases[0] !== candidate.baseSha) throw new AutopatchError("FAILED_GATE", "candidate has an invalid original merge base");
+  if (candidate.checkpointSha && !await git.isAncestor(candidate.checkpointSha, candidate.upstreamSha)) throw new AutopatchError("FAILED_PLAN", "upstream rewrote its checkpoint");
+  const originals = await git.lines(["rev-list", "--reverse", `${candidate.baseSha}..${candidate.originalSha}`]);
+  const survivors = candidate.patches.filter((p) => p.result === "applied" || p.result === "rerere");
+  const actual = await git.lines(["rev-list", "--reverse", `${candidate.upstreamSha}..${candidate.headSha}`]);
+  if (JSON.stringify(originals) !== JSON.stringify(candidate.patches.map((p) => p.original)) || JSON.stringify(actual) !== JSON.stringify(survivors.map((p) => p.current)) || candidate.patches.some((p) => p.current !== null !== survivors.includes(p))) {
+    throw new AutopatchError("FAILED_GATE", "candidate patch accounting or ordering is invalid");
+  }
+  for (const range of [`${candidate.baseSha}..${candidate.originalSha}`, `${candidate.upstreamSha}..${candidate.headSha}`]) {
+    if ((await git.lines(["rev-list", "--merges", range])).length) throw new AutopatchError("FAILED_GATE", "candidate patch series contains merges");
+  }
+  if (!bare) await git.run(["checkout", "-q", "--detach", candidate.headSha]);
+  const patches = await Promise.all(candidate.patches.map(async (p) => ({
+    sha: p.original,
+    subject: await git.out(["show", "-s", "--format=%s", p.original]),
+    author: await git.out(["show", "-s", "--format=%an", p.original]),
+    absorbed: p.result === "absorbed"
+  })));
+  const plan = {
+    kind: "rebase",
+    branch: candidate.branch,
+    upstreamBranch: candidate.upstreamBranch,
+    upstreamRef: "refs/autopatch/candidate/upstream",
+    branchSha: candidate.originalSha,
+    upstreamSha: candidate.upstreamSha,
+    base: candidate.baseSha,
+    patches,
+    expectedSurvivors: survivors.length,
+    upstreamCommits: await git.revListCount(`${candidate.baseSha}..${candidate.upstreamSha}`),
+    workflowPaths: []
+  };
+  return { git, candidate, plan };
+}
+
 // src/fixup.ts
 function resolvePatchRef(ref, mapping) {
   const r = ref.trim().toLowerCase();
-  if (!r) return void 0;
-  for (const [orig, cur] of mapping) {
-    if (orig.startsWith(r) || cur.startsWith(r)) return cur;
-  }
-  return void 0;
+  if (!/^[0-9a-f]{7,40}$/.test(r)) return void 0;
+  const matches = [...mapping].filter(([orig, cur]) => orig.startsWith(r) || cur.startsWith(r));
+  return matches.length === 1 ? matches[0][1] : void 0;
 }
 async function foldChanges(o) {
   const { git, plan, outcome, log } = o;
@@ -45189,10 +45770,12 @@ async function foldChanges(o) {
   if (!last) throw new Error("cannot fold changes: no surviving patches");
   const head = await git.revParse("HEAD");
   const named = o.targetPatch ? resolvePatchRef(o.targetPatch, outcome.mapping) : void 0;
-  if (o.targetPatch && !named) warnings.push(`target patch "${o.targetPatch}" not found in the series; choosing by file history`);
+  if (o.targetPatch && !named) throw new Error(`target patch "${o.targetPatch}" is missing or ambiguous`);
+  if (!await git.indexIsEmpty()) throw new Error("index must be empty before folding review fixes");
   const groups = /* @__PURE__ */ new Map();
   const folded = [];
   for (const file2 of o.files) {
+    await validateFilePath(git.cwd, file2);
     let into = named;
     if (!into) {
       const touched = await git.out(["log", "-1", "--format=%H", `${plan.upstreamSha}..HEAD`, "--", file2]);
@@ -45245,65 +45828,6 @@ async function foldChanges(o) {
   const oldToNew = new Map(current.map((c, i) => [c, newShas[i]]));
   for (const f of folded) f.into = oldToNew.get(f.into) ?? f.into;
   return { mapping, headSha: await git.revParse("HEAD"), folded, warnings };
-}
-
-// src/quarantine.ts
-var fs9 = __toESM(require("node:fs/promises"), 1);
-var path6 = __toESM(require("node:path"), 1);
-var INSTRUCTION_PATHS = [
-  "AGENTS.md",
-  "CLAUDE.md",
-  "CLAUDE.local.md",
-  ".cursorrules",
-  ".cursor",
-  ".github/copilot-instructions.md",
-  ".claude",
-  ".codex",
-  ".agents",
-  ".mcp.json",
-  "opencode.json",
-  "opencode.jsonc",
-  ".opencode",
-  "GEMINI.md",
-  ".windsurfrules"
-];
-async function exists2(p) {
-  try {
-    await fs9.lstat(p);
-    return true;
-  } catch {
-    return false;
-  }
-}
-async function quarantine(worktree, holdDir, keep = []) {
-  const keepSet = new Set(Array.from(keep));
-  const moved = [];
-  await fs9.mkdir(holdDir, { recursive: true });
-  for (const rel of INSTRUCTION_PATHS) {
-    if (keepSet.has(rel)) continue;
-    const src = path6.join(worktree, rel);
-    if (!await exists2(src)) continue;
-    const dst = path6.join(holdDir, rel);
-    await fs9.mkdir(path6.dirname(dst), { recursive: true });
-    await fs9.rename(src, dst);
-    moved.push(rel);
-  }
-  let restored = false;
-  return {
-    moved,
-    async restore() {
-      if (restored) return;
-      restored = true;
-      for (const rel of moved) {
-        const src = path6.join(holdDir, rel);
-        const dst = path6.join(worktree, rel);
-        if (!await exists2(src)) continue;
-        await fs9.rm(dst, { recursive: true, force: true });
-        await fs9.mkdir(path6.dirname(dst), { recursive: true });
-        await fs9.rename(src, dst);
-      }
-    }
-  };
 }
 
 // src/prompts/common.ts
@@ -45443,6 +45967,7 @@ function respondSystemPrompt() {
   return [
     "You rebased a personal fork's patch series onto a new upstream. A reviewer (or an automated gate) raised issues. Address each one: fix it by editing files, or rebut it with a specific technical explanation if it is wrong.",
     'Hard rules: edit files only; never run git commands that change state. Report every file you change in `files_changed`. For each issue you fix, name the patch the change belongs to in `target_patch` (use the sha from the patch table); the orchestrator folds your edits into that patch so the history stays "upstream + patches".',
+    'Edit only one target patch per round. Defer fixes belonging to other patches to a later round, with action "deferred" and target_patch null. Use target_patch only for changes you actually made in this round.',
     'Set `verdict: "approve"` only if, after your changes and rebuttals, you consider the series complete and correct.',
     UNTRUSTED_NOTE,
     SIDE_MAPPING
@@ -45487,24 +46012,11 @@ async function runConsensus(o) {
       diffStat: await git.out(["diff", "--no-color", "--stat", `${plan.upstreamSha}..HEAD`])
     };
   };
-  const readOnlyCall = async (fn) => {
-    const q = await quarantine(git.cwd, o.holdDir);
-    try {
-      return await fn();
-    } finally {
-      await q.restore();
-      const dirty = await git.statusPorcelain();
-      if (dirty.length > 0) {
-        notes.push(`a read-only agent call left the worktree dirty (${dirty.length} path(s)); reset`);
-        log.warning(notes[notes.length - 1]);
-        await git.run(["checkout", "-q", "--", "."]);
-        await git.run(["clean", "-fdq"]);
-      }
-    }
-  };
+  const readOnlyCall = (fn) => guardGit(git, "readonly", "read-only agent", fn);
   for (let round = 1; round <= o.maxRounds; round++) {
     const entry = { round, selfCheck: null, verdict: null, syntheticIssues: [], response: null, foldWarnings: [] };
     history.push(entry);
+    await o.onProgress?.(history, gates);
     let issues = [];
     if (!gates.ok) {
       log.info(`round ${round}: deterministic gates failed (${gates.failures.join("; ")})`);
@@ -45530,15 +46042,32 @@ ${gates.verify.outputTail}` : ""),
         const verdict = await readOnlyCall(
           () => o.reviewer.structured({ schemaName: "review", system: reviewSystemPrompt(), user: reviewUserPrompt(rctx), cwd: git.cwd, mode: "readonly" })
         );
-        if (verdict.verdict === "reject" && blocking(verdict.issues).length === 0) {
+        if (verdict.verdict === "reject" && verdict.issues.length > 0 && blocking(verdict.issues).length === 0) {
           notes.push(`round ${round}: reviewer rejected with only minor issues; treated as approval`);
           verdict.verdict = "approve";
         }
         entry.verdict = verdict;
         log.info(`round ${round}: reviewer ${verdict.verdict} \u2014 ${verdict.summary}`);
         issues = blocking(verdict.issues);
+        if (!verdict.checked.range_diff || gates.verify && !verdict.checked.verify_log) {
+          entry.syntheticIssues.push({
+            id: "review-checks",
+            severity: "blocker",
+            patch: null,
+            file: null,
+            description: "reviewer did not check the patch comparison and configured verification log",
+            suggested_fix: null
+          });
+        }
+        const decisions = /* @__PURE__ */ new Map();
+        const skippedMapping = new Map(skipped.map((r) => [r.sha, r.sha]));
+        for (const decision of verdict.skips_approved) {
+          const sha2 = resolvePatchRef(decision.patch, skippedMapping);
+          if (!sha2 || decisions.has(sha2)) throw new AutopatchError("FAILED_AGENT", `invalid, ambiguous, or duplicate skip approval: ${JSON.stringify(decision.patch)}`);
+          decisions.set(sha2, decision);
+        }
         for (const rec of skipped) {
-          const decision = verdict.skips_approved.find((s) => rec.sha.startsWith(s.patch.trim().toLowerCase()) || s.patch.trim().toLowerCase().startsWith(rec.sha.slice(0, 7)));
+          const decision = decisions.get(rec.sha);
           if (!decision || !decision.approved) {
             entry.syntheticIssues.push({
               id: `skip-${rec.sha.slice(0, 7)}`,
@@ -45552,9 +46081,11 @@ ${gates.verify.outputTail}` : ""),
         }
         issues = [...issues, ...entry.syntheticIssues];
       }
-      const selfOk = entry.selfCheck.complete;
-      const reviewOk = !o.reviewer || entry.verdict?.verdict === "approve" && entry.syntheticIssues.length === 0;
+      const selfOk = entry.selfCheck.complete && entry.selfCheck.concerns.length === 0;
+      const reviewOk = !o.reviewer || entry.verdict?.verdict === "approve" && issues.length === 0;
       if (selfOk && reviewOk) {
+        await assertCandidate(git, gates.candidate);
+        await o.onProgress?.(history, gates);
         const reason2 = o.reviewer ? `worker and reviewer agreed in round ${round}` : `worker self-check passed in round ${round} (no reviewer configured)`;
         log.info(reason2);
         return { state: "APPROVED", rounds: history, gates, headSha: await git.revParse("HEAD"), notes, reason: reason2 };
@@ -45568,47 +46099,46 @@ ${gates.verify.outputTail}` : ""),
         }
       }
     }
+    if (issues.length === 0) issues.push({
+      id: "review-rejected",
+      severity: "major",
+      patch: null,
+      file: null,
+      description: entry.verdict?.summary ?? "review has not approved this candidate",
+      suggested_fix: null
+    });
     const ids = issues.map((i) => i.id).sort().join(",");
-    if (previousIssueIds !== null && ids === previousIssueIds && !previousChangedFiles) {
+    const signature = JSON.stringify(issues.map((i) => [i.severity, i.patch, i.file, i.description.replace(/\s+/g, " ").trim()]).sort());
+    if (previousIssueIds !== null && signature === previousIssueIds && !previousChangedFiles) {
       const reason2 = `no progress: the same issues (${ids}) remain after a round with no file changes`;
       log.warning(reason2);
       return { state: gates.ok ? "CONTESTED" : "GATE_FAILED", rounds: history, gates, headSha: await git.revParse("HEAD"), notes, reason: reason2 };
     }
-    previousIssueIds = ids;
+    previousIssueIds = signature;
     if (round === o.maxRounds) break;
     const ctx = await context3(entry.selfCheck);
-    const q = await quarantine(git.cwd, o.holdDir);
-    const headBefore = await git.revParse("HEAD");
-    let response;
-    try {
-      response = await o.worker.structured({
-        schemaName: "respond",
-        system: respondSystemPrompt(),
-        user: respondUserPrompt(ctx, issues),
-        cwd: git.cwd,
-        mode: "edit",
-        meta: { round: String(round), issueIds: ids }
-      });
-    } finally {
-      await q.restore();
-    }
-    if (await git.revParse("HEAD") !== headBefore || await git.tryRevParse("REBASE_HEAD") !== void 0 && (await git.run(["rev-parse", "--git-path", "rebase-merge"])).stdout.trim() === "") {
-      throw new AutopatchError("FAILED_TAMPERED", "worker changed git history while responding to review (it must only edit files)");
-    }
+    const response = await guardGit(git, "edit", "review worker", () => o.worker.structured({
+      schemaName: "respond",
+      system: respondSystemPrompt(),
+      user: respondUserPrompt(ctx, issues),
+      cwd: git.cwd,
+      mode: "edit",
+      meta: { round: String(round), issueIds: ids }
+    }));
     entry.response = response;
     log.info(`round ${round}: worker responded (${response.verdict}) \u2014 ${response.summary}; ${response.files_changed.length} file(s) changed`);
     const dirty = await git.statusPorcelain();
     const changedSet = new Set(response.files_changed);
+    for (const file2 of changedSet) await validateFilePath(git.cwd, file2);
     const unreported = dirty.map((l) => l.slice(3)).filter((p) => !changedSet.has(p));
     if (unreported.length > 0) {
-      notes.push(`round ${round}: worker changed unreported files, discarded: ${unreported.join(", ")}`);
-      log.warning(notes[notes.length - 1]);
-      await git.run(["checkout", "-q", "--", ...unreported], { allowFailure: true });
-      await git.run(["clean", "-fdq", "--", ...unreported], { allowFailure: true });
+      throw new AutopatchError("FAILED_TAMPERED", "review worker changed unreported files", unreported);
     }
     previousChangedFiles = false;
     if (response.files_changed.length > 0) {
       const targets = new Set(response.responses.map((r) => r.target_patch).filter((t) => !!t));
+      for (const target of targets) if (!resolvePatchRef(target, outcome.mapping)) throw new AutopatchError("FAILED_AGENT", `invalid fixup target: ${target}`);
+      if (targets.size > 1) throw new AutopatchError("FAILED_AGENT", "review fixes must target one patch per round; split multi-patch fixes across rounds");
       const fold = await foldChanges({
         git,
         plan,
@@ -45626,6 +46156,7 @@ ${gates.verify.outputTail}` : ""),
       previousChangedFiles = fold.folded.length > 0;
       gates = await o.runGates();
     }
+    await o.onProgress?.(history, gates);
   }
   const reason = gates.ok ? `no consensus after ${o.maxRounds} round(s)` : `deterministic gates still failing after ${o.maxRounds} round(s): ${gates.failures.join("; ")}`;
   log.warning(reason);
@@ -45633,13 +46164,101 @@ ${gates.verify.outputTail}` : ""),
 }
 
 // src/gates.ts
-var import_node_child_process3 = require("node:child_process");
-var fs11 = __toESM(require("node:fs/promises"), 1);
-var path8 = __toESM(require("node:path"), 1);
+var import_node_child_process4 = require("node:child_process");
+var fs15 = __toESM(require("node:fs/promises"), 1);
+var path12 = __toESM(require("node:path"), 1);
 
 // src/rebase.ts
-var fs10 = __toESM(require("node:fs/promises"), 1);
-var path7 = __toESM(require("node:path"), 1);
+var fs14 = __toESM(require("node:fs/promises"), 1);
+var path11 = __toESM(require("node:path"), 1);
+
+// src/quarantine.ts
+var fs13 = __toESM(require("node:fs/promises"), 1);
+var path10 = __toESM(require("node:path"), 1);
+var INSTRUCTION_PATHS = [
+  "AGENTS.md",
+  "CLAUDE.md",
+  "CLAUDE.local.md",
+  ".cursorrules",
+  ".cursor",
+  ".github/copilot-instructions.md",
+  ".claude",
+  ".codex",
+  ".agents",
+  ".mcp.json",
+  "opencode.json",
+  "opencode.jsonc",
+  ".opencode",
+  "GEMINI.md",
+  ".windsurfrules"
+];
+async function exists2(p) {
+  try {
+    await fs13.lstat(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function quarantine(worktree, holdDir, keep = []) {
+  const keepSet = new Set(Array.from(keep));
+  const root = await fs13.realpath(worktree);
+  const moved = [];
+  await fs13.mkdir(holdDir, { recursive: true });
+  const move = async (rel) => {
+    if (keepSet.has(rel)) return;
+    const src = path10.join(worktree, rel);
+    if (!await exists2(src)) return;
+    if ([...keepSet].some((p) => p.startsWith(`${rel}/`))) {
+      if (!(await fs13.lstat(src)).isDirectory()) throw new AutopatchError("FAILED_TAMPERED", "instruction directory was replaced by a symlink or file");
+      for (const name of await fs13.readdir(src)) await move(`${rel}/${name}`);
+      return;
+    }
+    await validateFilePath(worktree, `${rel}/__quarantine_probe__`).catch(async (e) => {
+      if (!(await fs13.lstat(src)).isDirectory()) await validateFilePath(worktree, rel);
+      else throw e;
+    });
+    const dst = path10.join(holdDir, rel);
+    await fs13.mkdir(path10.dirname(dst), { recursive: true });
+    await fs13.rename(src, dst);
+    moved.push(rel);
+  };
+  try {
+    for (const rel of INSTRUCTION_PATHS) await move(rel);
+  } catch (e) {
+    for (const rel of moved.reverse()) await fs13.rename(path10.join(holdDir, rel), path10.join(worktree, rel));
+    throw e;
+  }
+  let restored = false;
+  return {
+    moved,
+    async restore() {
+      if (restored) return;
+      restored = true;
+      if (await fs13.realpath(worktree) !== root) throw new AutopatchError("FAILED_TAMPERED", "worktree root changed during quarantine");
+      const recreated = [];
+      for (const rel of moved) {
+        const src = path10.join(holdDir, rel);
+        const dst = path10.join(worktree, rel);
+        if (!await exists2(src)) continue;
+        if (path10.dirname(rel) !== ".") {
+          try {
+            await validateFilePath(worktree, `${path10.dirname(rel)}/__restore_probe__`);
+          } catch {
+            throw new AutopatchError("FAILED_TAMPERED", "agent replaced a quarantined file ancestor", [rel]);
+          }
+        }
+        if (await exists2(dst)) recreated.push(rel);
+        await fs13.rm(dst, { recursive: true, force: true });
+        await fs13.mkdir(path10.dirname(dst), { recursive: true });
+        await fs13.rename(src, dst);
+      }
+      if (recreated.length) throw new AutopatchError("FAILED_TAMPERED", "agent recreated quarantined instruction files", recreated);
+    }
+  };
+}
+
+// src/rebase.ts
 var REBASE_CONFIG = {
   "rebase.autoSquash": "false",
   "rebase.updateRefs": "false",
@@ -45654,7 +46273,7 @@ var REBASE_CONFIG = {
 var MARKER_RE = /^(<{7}|={7}|>{7}|\|{7})( |$)/m;
 async function exists3(p) {
   try {
-    await fs10.lstat(p);
+    await fs14.lstat(p);
     return true;
   } catch {
     return false;
@@ -45662,7 +46281,8 @@ async function exists3(p) {
 }
 async function isBinaryFile(abs) {
   try {
-    const fh = await fs10.open(abs, "r");
+    if (!(await fs14.lstat(abs)).isFile()) return false;
+    const fh = await fs14.open(abs, "r");
     try {
       const buf = Buffer.alloc(8e3);
       const { bytesRead } = await fh.read(buf, 0, 8e3, 0);
@@ -45675,8 +46295,10 @@ async function isBinaryFile(abs) {
   }
 }
 async function hasConflictMarkers(abs) {
+  const st = await fs14.lstat(abs);
+  if (!st.isFile()) return false;
   if (await isBinaryFile(abs)) return false;
-  const content = await fs10.readFile(abs, "utf8");
+  const content = await fs14.readFile(abs, "utf8");
   return MARKER_RE.test(content);
 }
 function classify(stages) {
@@ -45686,15 +46308,6 @@ function classify(stages) {
   if (has(1) && has(2) && !has(3)) return "deleted_by_patch";
   if (!has(1) && has(2) && has(3)) return "both_added";
   return "other";
-}
-async function fingerprint(git) {
-  return {
-    head: await git.out(["rev-parse", "HEAD"]),
-    rebaseHead: await git.tryRevParse("REBASE_HEAD"),
-    rebaseDir: await exists3(await git.gitPath("rebase-merge")),
-    refs: await git.out(["for-each-ref", "--format=%(refname) %(objectname)"]),
-    stash: (await git.run(["stash", "list"], { allowFailure: true })).stdout
-  };
 }
 function cap(text, max) {
   if (text.length <= max) return text;
@@ -45734,6 +46347,7 @@ async function runRebase(o) {
       throw new AutopatchError("FAILED_REBASE", `git rebase failed outside of a conflict: ${r.stderr.trim() || r.stdout.trim()}`);
     }
     const rebaseHead = await git.tryRevParse("REBASE_HEAD");
+    await o.onProgress?.([...records.values()], rebaseHead ?? null);
     const patch = plan.patches.find((p) => p.sha === rebaseHead);
     if (!patch) {
       throw new AutopatchError("FAILED_REBASE", `rebase stopped on unknown commit ${rebaseHead ?? "(none)"}`);
@@ -45744,35 +46358,21 @@ async function runRebase(o) {
       if (await git.indexIsEmpty()) {
         log.info(`patch ${index}/${total} "${patch.subject}" became empty on the new base; skipping`);
         record2(patch, { result: "became_empty" });
+        await o.onProgress?.([...records.values()], patch.sha);
         r = await git.run(["rebase", "--skip"], { allowFailure: true });
         continue;
       }
       throw new AutopatchError("FAILED_REBASE", `rebase stopped on "${patch.subject}" with staged changes but no conflicts: ${r.stderr.trim()}`);
     }
-    const remaining = new Set((await git.run(["rerere", "remaining"], { allowFailure: true })).stdout.split("\n").filter(Boolean));
-    const preResolved = [...unmerged.keys()].filter((p) => remaining.size > 0 && !remaining.has(p));
-    for (const p of preResolved) {
-      if (await hasConflictMarkers(path7.join(git.cwd, p))) {
-        remaining.add(p);
-        continue;
-      }
-      await git.run(["add", "--", p]);
-      log.info(`patch ${index}/${total}: ${p} resolved from rerere cache`);
-    }
     const conflictPaths = [];
     for (const [p, stages] of unmerged) {
-      if (remaining.size > 0 && !remaining.has(p)) continue;
+      await validateFilePath(git.cwd, p);
       conflictPaths.push({
         path: p,
         kind: classify(stages),
-        binary: await isBinaryFile(path7.join(git.cwd, p)),
+        binary: await isBinaryFile(path11.join(git.cwd, p)),
         stages: [...stages].sort()
       });
-    }
-    if (conflictPaths.length === 0) {
-      record2(patch, { result: "rerere", conflicts: [], extraPaths: [] });
-      r = await git.run(["rebase", "--continue"], { allowFailure: true });
-      continue;
     }
     log.info(`patch ${index}/${total} "${patch.subject}" conflicts in ${conflictPaths.length} file(s): ${conflictPaths.map((c) => `${c.path} [${c.kind}${c.binary ? ", binary" : ""}]`).join(", ")}`);
     const ctx = {
@@ -45788,10 +46388,11 @@ async function runRebase(o) {
       previousProblems: []
     };
     for (const c of conflictPaths) {
-      const abs = path7.join(git.cwd, c.path);
+      await validateFilePath(git.cwd, c.path);
+      const abs = path11.join(git.cwd, c.path);
       ctx.workingCopies.push({
         path: c.path,
-        content: c.binary || !await exists3(abs) ? null : cap(await fs10.readFile(abs, "utf8"), caps.file)
+        content: c.binary || !await exists3(abs) || (await fs14.lstat(abs)).isSymbolicLink() ? null : cap(await fs14.readFile(abs, "utf8"), caps.file)
       });
       ctx.upstreamDelta.push({
         path: c.path,
@@ -45803,20 +46404,14 @@ async function runRebase(o) {
     let extraPaths = [];
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       ctx.attempt = attempt;
-      const before = await fingerprint(git);
-      const q = await quarantine(git.cwd, o.holdDir, conflictPaths.map((c) => c.path));
-      try {
-        report = await o.worker.resolve(ctx);
-      } finally {
-        await q.restore();
-      }
-      const after = await fingerprint(git);
-      if (JSON.stringify(before) !== JSON.stringify(after)) {
-        throw new AutopatchError("FAILED_TAMPERED", `worker changed git state while resolving "${patch.subject}" (it must only edit files)`, [
-          `before: ${JSON.stringify(before)}`,
-          `after:  ${JSON.stringify(after)}`
-        ]);
-      }
+      report = await guardGit(git, "edit", "conflict worker", async () => {
+        const q = await quarantine(git.cwd, o.holdDir, conflictPaths.map((c) => c.path));
+        try {
+          return await o.worker.resolve(ctx);
+        } finally {
+          await q.restore();
+        }
+      });
       if (report.status === "need_help") {
         throw new AutopatchError("FAILED_REBASE", `worker could not resolve "${patch.subject}": ${report.summary}`, report.risks);
       }
@@ -45833,11 +46428,13 @@ async function runRebase(o) {
     if (report.status === "skip_patch") {
       log.info(`patch ${index}/${total} "${patch.subject}" skipped by worker: ${report.summary}`);
       record2(patch, { result: "skipped", conflicts: conflictPaths, report, extraPaths });
+      await o.onProgress?.([...records.values()], patch.sha);
       r = await git.run(["rebase", "--skip"], { allowFailure: true });
       continue;
     }
     conflictsResolved += 1;
     record2(patch, { result: "applied", conflicts: conflictPaths, report, extraPaths });
+    await o.onProgress?.([...records.values()], patch.sha);
     r = await git.run(["rebase", "--continue"], { allowFailure: true });
   }
   const headSha = await git.revParse("HEAD");
@@ -45862,6 +46459,7 @@ async function runRebase(o) {
     rec.newSha = newSha;
   });
   const ordered = plan.patches.map((p) => records.get(p.sha));
+  await o.onProgress?.(ordered, null);
   log.info(`rebase complete: ${newShas.length} patch(es) on ${plan.upstreamSha.slice(0, 12)}, ${conflictsResolved} conflict(s) resolved`);
   return { headSha, records: ordered, conflictsResolved, mapping };
 }
@@ -45874,17 +46472,14 @@ async function applyReport(git, report, conflicts) {
   }
   const extraPaths = [];
   for (const f of report.files) {
-    if (f.path.includes("..") || path7.isAbsolute(f.path)) {
-      problems.push(`invalid path in report: ${f.path}`);
-      continue;
-    }
-    const abs = path7.join(git.cwd, f.path);
+    await validateFilePath(git.cwd, f.path);
+    const abs = path11.join(git.cwd, f.path);
     const c = conflictMap.get(f.path);
     if (!c) extraPaths.push(f.path);
     switch (f.action) {
       case "deleted":
         await git.run(["rm", "-q", "--force", "--ignore-unmatch", "--", f.path], { allowFailure: true });
-        if (await exists3(abs)) await fs10.rm(abs, { force: true });
+        if (await exists3(abs)) await fs14.rm(abs, { force: true });
         await git.run(["add", "-u", "--", f.path], { allowFailure: true });
         break;
       case "take_upstream":
@@ -45942,9 +46537,10 @@ async function runGates(o) {
   const { git, plan } = o;
   const failures = [];
   const head = await git.revParse("HEAD");
+  const candidate = await candidateIdentity(git);
   for (const dir of ["rebase-merge", "rebase-apply"]) {
     try {
-      await fs11.access(await git.gitPath(dir));
+      await fs15.access(await git.gitPath(dir));
       failures.push("a rebase is still in progress");
       break;
     } catch {
@@ -45957,38 +46553,43 @@ async function runGates(o) {
   if (!await git.isAncestor(plan.upstreamSha, head)) failures.push(`HEAD does not descend from upstream ${plan.upstreamSha.slice(0, 12)}`);
   const count = await git.revListCount(`${plan.upstreamSha}..${head}`);
   if (count !== o.expectedCount) failures.push(`expected ${o.expectedCount} commits on top of upstream, found ${count}`);
-  const changedFiles = await git.lines(["diff", "--name-only", plan.upstreamSha, head]);
+  const changedFiles = await git.paths(["diff", "--name-only", "-z", plan.upstreamSha, head]);
   for (const rel of changedFiles) {
-    const abs = path8.join(git.cwd, rel);
+    await validateFilePath(git.cwd, rel);
+    const abs = path12.join(git.cwd, rel);
     try {
-      await fs11.access(abs);
+      await fs15.access(abs);
     } catch {
       continue;
     }
     if (await hasConflictMarkers(abs)) failures.push(`conflict markers in ${rel}`);
   }
-  const rangeDiff = (
+  const comparison = (
     // Patches rewritten during conflict resolution can differ a lot from their originals; a high creation
     // factor makes range-diff pair them instead of showing a deletion and an addition.
-    (await git.run(["range-diff", "--no-color", "--creation-factor=100", `${plan.base}..${plan.branchSha}`, `${plan.upstreamSha}..${head}`], {
+    await git.run(count === 0 || plan.patches.length === 0 ? ["log", "--reverse", "--format=fuller", "-p", "--no-color", `${plan.base}..${plan.branchSha}`] : ["range-diff", "--no-color", "--creation-factor=100", `${plan.base}..${plan.branchSha}`, `${plan.upstreamSha}..${head}`], {
       allowFailure: true
-    })).stdout
+    })
   );
+  if (comparison.code !== 0) failures.push(`range-diff failed: ${comparison.stderr.trim()}`);
+  const rangeDiff = count === 0 ? `No surviving patches. Original patches (all dropped):
+${comparison.stdout}` : comparison.stdout;
   let verify = null;
   if (o.verifyCommand && failures.length === 0) {
-    verify = await runVerify(o.verifyCommand, git.cwd, o.env, o.verifyTimeoutMs ?? 30 * 6e4, o.tailChars ?? 2e4);
+    verify = await guardGit(git, "readonly", "verify command", () => runVerify(o.verifyCommand, git.cwd, o.env, o.verifyTimeoutMs ?? 30 * 6e4, o.tailChars ?? 2e4, o.sandbox));
     if (verify.timedOut) failures.push(`verify command timed out after ${Math.round(verify.durationMs / 1e3)}s`);
     else if (verify.code !== 0) failures.push(`verify command failed with exit code ${verify.code}`);
     o.log.info(`verify "${o.verifyCommand}": ${verify.timedOut ? "timed out" : `exit ${verify.code}`} in ${(verify.durationMs / 1e3).toFixed(1)}s`);
   }
-  return { ok: failures.length === 0, failures, rangeDiff, changedFiles, verify };
+  return { candidate, ok: failures.length === 0, failures, rangeDiff, changedFiles, verify };
 }
-function runVerify(command, cwd, env, timeoutMs, tailChars) {
-  return new Promise((resolve3) => {
+async function runVerify(command, cwd, env, timeoutMs, tailChars, sandbox = false) {
+  const launch = sandbox ? await sandboxCommand("sh", ["-c", command], cwd, "edit", env) : { bin: "sh", args: ["-c", command], env };
+  return new Promise((resolve5, reject) => {
     const started = Date.now();
     const chunks = [];
     let size = 0;
-    const child = (0, import_node_child_process3.spawn)("sh", ["-c", command], { cwd, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+    const child = (0, import_node_child_process4.spawn)(launch.bin, launch.args, { cwd, env: launch.env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
     const push = (b) => {
       chunks.push(b);
       size += b.length;
@@ -46005,10 +46606,14 @@ function runVerify(command, cwd, env, timeoutMs, tailChars) {
         child.kill("SIGKILL");
       }
     }, timeoutMs);
+    child.on("error", (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
     child.on("close", (code) => {
       clearTimeout(timer);
       const out = Buffer.concat(chunks).toString("utf8");
-      resolve3({
+      resolve5({
         command,
         code,
         timedOut,
@@ -46019,264 +46624,13 @@ function runVerify(command, cwd, env, timeoutMs, tailChars) {
   });
 }
 
-// src/git.ts
-var import_node_child_process4 = require("node:child_process");
-var fs12 = __toESM(require("node:fs/promises"), 1);
-var path9 = __toESM(require("node:path"), 1);
-var GitError = class extends Error {
-  constructor(args, result) {
-    super(`git ${args.join(" ")} failed with code ${result.code}: ${result.stderr.trim() || result.stdout.trim()}`);
-    this.args = args;
-    this.result = result;
-    this.name = "GitError";
-  }
-  args;
-  result;
-};
-var BASE_GIT_ENV = {
-  GIT_EDITOR: "true",
-  GIT_SEQUENCE_EDITOR: "true",
-  GIT_MERGE_AUTOEDIT: "no",
-  GIT_TERMINAL_PROMPT: "0",
-  GIT_PAGER: "cat",
-  LC_ALL: "C"
-};
-var BOT_IDENTITY = {
-  name: "autopatch[bot]",
-  email: "autopatch@users.noreply.github.com"
-};
-function baseEnvFromProcess() {
-  const keep = ["PATH", "HOME", "TMPDIR", "TMP", "TEMP", "LANG", "SSH_AUTH_SOCK", "XDG_CONFIG_HOME"];
-  const out = {};
-  for (const k of keep) {
-    const v = process.env[k];
-    if (v !== void 0) out[k] = v;
-  }
-  return out;
-}
-var Git = class _Git {
-  cwd;
-  config;
-  env;
-  constructor(cwd, options = {}) {
-    this.cwd = cwd;
-    this.config = {
-      "user.name": BOT_IDENTITY.name,
-      "user.email": BOT_IDENTITY.email,
-      "commit.gpgsign": "false",
-      "tag.gpgsign": "false",
-      "core.hooksPath": "/dev/null",
-      "advice.detachedHead": "false",
-      "advice.skippedCherryPicks": "false",
-      "advice.mergeConflict": "false",
-      "core.autocrlf": "false",
-      "color.ui": "never",
-      ...options.config
-    };
-    this.env = { ...baseEnvFromProcess(), ...BASE_GIT_ENV, ...options.env };
-  }
-  /** A Git bound to another directory with the same config and env. */
-  at(cwd) {
-    return new _Git(cwd, { config: this.config, env: this.env });
-  }
-  withConfig(config2) {
-    return new _Git(this.cwd, { config: { ...this.config, ...config2 }, env: this.env });
-  }
-  async run(args, options = {}) {
-    const configArgs = [];
-    for (const [k, v] of Object.entries(this.config)) configArgs.push("-c", `${k}=${v}`);
-    const fullArgs = [...configArgs, ...args];
-    const result = await new Promise((resolve3) => {
-      const child = (0, import_node_child_process4.execFile)(
-        "git",
-        fullArgs,
-        {
-          cwd: options.cwd ?? this.cwd,
-          env: { ...this.env, ...options.env },
-          maxBuffer: 256 * 1024 * 1024,
-          encoding: "utf8",
-          ...options.timeoutMs ? { timeout: options.timeoutMs, killSignal: "SIGKILL" } : {}
-        },
-        (err, stdout, stderr) => {
-          const code = err && typeof err.code === "number" ? err.code : err ? 128 : 0;
-          resolve3({ code, stdout: String(stdout), stderr: String(stderr) });
-        }
-      );
-      if (options.input !== void 0) {
-        child.stdin?.end(options.input);
-      }
-    });
-    if (result.code !== 0 && !options.allowFailure) {
-      throw new GitError(args, result);
-    }
-    return result;
-  }
-  /** Run and return trimmed stdout. */
-  async out(args, options = {}) {
-    return (await this.run(args, options)).stdout.trim();
-  }
-  /** Run and return non-empty stdout lines. */
-  async lines(args, options = {}) {
-    return (await this.run(args, options)).stdout.split("\n").filter((l) => l.length > 0);
-  }
-  async revParse(ref) {
-    return this.out(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
-  }
-  async tryRevParse(ref) {
-    const r = await this.run(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], { allowFailure: true });
-    return r.code === 0 ? r.stdout.trim() : void 0;
-  }
-  async gitDir() {
-    return path9.resolve(this.cwd, await this.out(["rev-parse", "--git-dir"]));
-  }
-  async gitPath(name) {
-    return path9.resolve(this.cwd, await this.out(["rev-parse", "--git-path", name]));
-  }
-  async isShallow() {
-    return await this.out(["rev-parse", "--is-shallow-repository"]) === "true";
-  }
-  async mergeBases(a, b) {
-    const r = await this.run(["merge-base", "--all", a, b], { allowFailure: true });
-    if (r.code === 1) return [];
-    if (r.code !== 0) throw new GitError(["merge-base", "--all", a, b], r);
-    return r.stdout.split("\n").filter(Boolean);
-  }
-  async isAncestor(ancestor, descendant) {
-    const r = await this.run(["merge-base", "--is-ancestor", ancestor, descendant], { allowFailure: true });
-    if (r.code === 0) return true;
-    if (r.code === 1) return false;
-    throw new GitError(["merge-base", "--is-ancestor", ancestor, descendant], r);
-  }
-  async revListCount(range) {
-    return Number(await this.out(["rev-list", "--count", range]));
-  }
-  /** Resolve the default branch of a remote via its symbolic HEAD. */
-  async remoteDefaultBranch(remote) {
-    const r = await this.run(["ls-remote", "--symref", remote, "HEAD"], { allowFailure: true });
-    if (r.code !== 0) return void 0;
-    const m = /^ref: refs\/heads\/(\S+)\tHEAD$/m.exec(r.stdout);
-    return m?.[1];
-  }
-  async remoteUrl(remote) {
-    const r = await this.run(["remote", "get-url", remote], { allowFailure: true });
-    return r.code === 0 ? r.stdout.trim() : void 0;
-  }
-  async ensureRemote(name, url2) {
-    const existing = await this.remoteUrl(name);
-    if (existing === void 0) {
-      await this.run(["remote", "add", name, url2]);
-    } else if (existing !== url2) {
-      await this.run(["remote", "set-url", name, url2]);
-    }
-  }
-  /** Unmerged index entries grouped by path with the stages present (1=base, 2=ours, 3=theirs). */
-  async unmergedPaths() {
-    const out = /* @__PURE__ */ new Map();
-    const raw = (await this.run(["ls-files", "-u", "-z"])).stdout;
-    for (const rec of raw.split("\0")) {
-      if (!rec) continue;
-      const m = /^\d+ [0-9a-f]+ ([123])\t([\s\S]*)$/.exec(rec);
-      if (!m) continue;
-      const stage = Number(m[1]);
-      const p = m[2];
-      const set2 = out.get(p) ?? /* @__PURE__ */ new Set();
-      set2.add(stage);
-      out.set(p, set2);
-    }
-    return out;
-  }
-  async statusPorcelain() {
-    return this.lines(["status", "--porcelain=v1", "--untracked-files=all"]);
-  }
-  async indexIsEmpty() {
-    const r = await this.run(["diff", "--cached", "--quiet"], { allowFailure: true });
-    if (r.code === 0) return true;
-    if (r.code === 1) return false;
-    throw new GitError(["diff", "--cached", "--quiet"], r);
-  }
-  async worktreeAdd(dir, commitish) {
-    await fs12.mkdir(path9.dirname(dir), { recursive: true });
-    await this.run(["worktree", "add", "--detach", dir, commitish]);
-    return this.at(dir);
-  }
-  async worktreeRemove(dir) {
-    await this.run(["worktree", "remove", "--force", dir], { allowFailure: true });
-    await this.run(["worktree", "prune"], { allowFailure: true });
-  }
-};
-function repoUrl(spec, host = "https://github.com") {
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(spec) || spec.startsWith("git@") || spec.startsWith("/") || spec.startsWith("file:")) {
-    return spec;
-  }
-  const trimmed = spec.replace(/\.git$/, "");
-  return `${host}/${trimmed}.git`;
-}
-function authExtraHeader(token) {
-  const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
-  return { "http.https://github.com/.extraheader": `AUTHORIZATION: basic ${basic}` };
-}
-
-// src/issue.ts
-var ISSUE_LABEL = "autopatch";
-function issueTitle(branch) {
-  return `autopatch: rebase of ${branch} needs attention`;
-}
-async function ensureLabel(api, owner, repo) {
-  try {
-    await api.getLabel({ owner, repo, name: ISSUE_LABEL });
-  } catch {
-    await api.createLabel({ owner, repo, name: ISSUE_LABEL, color: "7057ff", description: "Opened by the autopatch action when a rebase needs a human" }).catch(() => void 0);
-  }
-}
-async function findOpen(api, owner, repo, title) {
-  const { data } = await api.listForRepo({ owner, repo, state: "open", labels: ISSUE_LABEL, per_page: 50 });
-  return data.find((i) => i.title === title)?.number;
-}
-async function upsertFailureIssue(api, owner, repo, branch, body, log) {
-  await ensureLabel(api, owner, repo);
-  const title = issueTitle(branch);
-  const existing = await findOpen(api, owner, repo, title);
-  if (existing) {
-    const { data: data2 } = await api.update({ owner, repo, issue_number: existing, body });
-    await api.createComment({ owner, repo, issue_number: existing, body: "A new autopatch run failed; the issue body was updated with the latest details." });
-    log.info(`updated issue #${existing}`);
-    return data2.html_url;
-  }
-  const { data } = await api.create({ owner, repo, title, body, labels: [ISSUE_LABEL] });
-  log.info(`opened issue #${data.number}`);
-  return data.html_url;
-}
-async function closeFailureIssue(api, owner, repo, branch, comment, log) {
-  const existing = await findOpen(api, owner, repo, issueTitle(branch));
-  if (!existing) return;
-  await api.createComment({ owner, repo, issue_number: existing, body: comment });
-  await api.update({ owner, repo, issue_number: existing, state: "closed", state_reason: "completed" });
-  log.info(`closed issue #${existing}`);
-}
-
 // src/plan.ts
-async function resolveBranches(git, opts) {
-  const origin = opts.originRemote ?? "origin";
-  const upstream = opts.upstreamRemote ?? "upstream";
-  const branch = opts.branch ?? await git.remoteDefaultBranch(origin);
-  if (!branch) {
-    throw new AutopatchError("FAILED_PLAN", `could not determine the default branch of remote "${origin}"; set the branch input`);
-  }
-  const upstreamBranch = opts.upstreamBranch ?? await git.remoteDefaultBranch(upstream);
-  if (!upstreamBranch) {
-    throw new AutopatchError(
-      "FAILED_PLAN",
-      `could not determine the default branch of remote "${upstream}"; set the upstream_branch input`
-    );
-  }
-  return { branch, upstreamBranch };
-}
 async function listPatches(git, base, head) {
   const sep2 = "";
   const lines = await git.lines(["log", "--reverse", `--format=%H${sep2}%an${sep2}%s`, `${base}..${head}`]);
   return lines.map((l) => {
-    const [sha = "", author = "", ...rest] = l.split(sep2);
-    return { sha, author, subject: rest.join(sep2) };
+    const [sha2 = "", author = "", ...rest] = l.split(sep2);
+    return { sha: sha2, author, subject: rest.join(sep2) };
   });
 }
 async function absorbedPatches(git, upstream, head, base) {
@@ -46301,6 +46655,13 @@ async function computePlan(git, opts) {
       `upstream branch "${opts.upstreamBranch}" was not fetched (expected ${upstreamRef}); check the upstream and upstream_branch inputs`
     );
   }
+  if (opts.checkpointSha && !await git.isAncestor(opts.checkpointSha, upstreamSha)) {
+    throw new AutopatchError("FAILED_PLAN", "upstream history was rewritten since the last accepted checkpoint; inspect the rewrite and explicitly reinitialize the upstream checkpoint");
+  }
+  const anchor2 = opts.checkpointSha ?? opts.initialBase;
+  if (anchor2 && (!await git.isAncestor(anchor2, branchSha) || !await git.isAncestor(anchor2, upstreamSha))) {
+    throw new AutopatchError("FAILED_PLAN", "the upstream checkpoint/initial_base must be an ancestor of both the fork and upstream");
+  }
   const bases = await git.mergeBases(upstreamSha, branchSha);
   if (bases.length === 0) {
     throw new AutopatchError(
@@ -46316,6 +46677,9 @@ async function computePlan(git, opts) {
     );
   }
   const base = bases[0];
+  if (opts.initialBase && !opts.checkpointSha && base !== await git.revParse(opts.initialBase)) {
+    throw new AutopatchError("FAILED_PLAN", "initial_base must equal the current merge base; inspect and linearize the fork before initialization");
+  }
   const merges = await git.lines(["rev-list", "--merges", "--format=%h %s", "--no-commit-header", `${base}..${branchSha}`]);
   if (merges.length > 0) {
     throw new AutopatchError(
@@ -46347,8 +46711,8 @@ async function computePlan(git, opts) {
   const upstreamCommits = await git.revListCount(`${base}..${upstreamSha}`);
   const workflowPaths = Array.from(
     /* @__PURE__ */ new Set([
-      ...await git.lines(["diff", "--name-only", base, branchSha, "--", ".github/workflows"]),
-      ...await git.lines(["diff", "--name-only", base, upstreamSha, "--", ".github/workflows"])
+      ...await git.paths(["diff", "--name-only", "-z", base, branchSha, "--", ".github/workflows"]),
+      ...await git.paths(["diff", "--name-only", "-z", base, upstreamSha, "--", ".github/workflows"])
     ])
   ).sort();
   return {
@@ -46367,6 +46731,14 @@ async function computePlan(git, opts) {
 // src/publish.ts
 var TEMP_BRANCH_PREFIX = "autopatch/";
 var BACKUP_PREFIX = "refs/autopatch/backup/";
+var checkpointRef = (branch) => `refs/autopatch/upstream/${branch}`;
+async function fetchCheckpoint(git, branch) {
+  const ref = checkpointRef(branch);
+  const remote = await git.lines(["ls-remote", "origin", ref]);
+  const sha2 = remote[0]?.split("	")[0];
+  if (sha2) await git.run(["fetch", "--no-tags", "origin", `+${ref}:${ref}`]);
+  return sha2;
+}
 function tempBranchName(runId, attempt) {
   return `${TEMP_BRANCH_PREFIX}${runId}-${attempt}`;
 }
@@ -46375,9 +46747,7 @@ function backupRefName(branch, runId, now = /* @__PURE__ */ new Date()) {
   return `${BACKUP_PREFIX}${d}-${runId}/${branch}`;
 }
 async function authed(ctx) {
-  const url2 = await ctx.git.remoteUrl("origin") ?? "";
-  if (ctx.token && /^https:\/\/github\.com\//.test(url2)) return ctx.git.withConfig(authExtraHeader(ctx.token));
-  return ctx.git;
+  return ctx.git.authenticated(ctx.token);
 }
 async function pushTempBranch(ctx, headSha, tempBranch) {
   if (ctx.dryRun) {
@@ -46389,24 +46759,36 @@ async function pushTempBranch(ctx, headSha, tempBranch) {
   ctx.log.info(`pushed ${headSha.slice(0, 12)} to ${tempBranch}`);
 }
 async function publishBranch(ctx, headSha, tempBranch, keepBackups) {
-  const backupRef = backupRefName(ctx.branch, ctx.runId);
+  const backupRef = backupRefName(ctx.branch, ctx.runAttempt ? `${ctx.runId}-${ctx.runAttempt}` : ctx.runId);
   if (ctx.dryRun) {
     ctx.log.info(`dry run: would back up ${ctx.leaseSha.slice(0, 12)} to ${backupRef} and force-push ${headSha.slice(0, 12)} to ${ctx.branch}`);
     return { backupRef, pushed: false, prunedBackups: [] };
   }
   const git = await authed(ctx);
-  await runPush(git, ["push", "--no-verify", "origin", `${ctx.leaseSha}:${backupRef}`]);
+  const checkpoint = checkpointRef(ctx.branch);
+  const leases = [`--force-with-lease=refs/heads/${ctx.branch}:${ctx.leaseSha}`, `--force-with-lease=${backupRef}:`];
+  const refs = [`${ctx.leaseSha}:${backupRef}`, `${headSha}:refs/heads/${ctx.branch}`];
+  if (ctx.upstreamSha) {
+    leases.push(`--force-with-lease=${checkpoint}:${ctx.checkpointSha ?? ""}`);
+    refs.push(`${ctx.upstreamSha}:${checkpoint}`);
+  }
+  await runPush(git, ["push", "--atomic", "--no-verify", ...leases, "origin", ...refs]);
   ctx.log.info(`backed up ${ctx.branch}@${ctx.leaseSha.slice(0, 12)} to ${backupRef}`);
-  await runPush(git, ["push", "--no-verify", `--force-with-lease=refs/heads/${ctx.branch}:${ctx.leaseSha}`, "origin", `${headSha}:refs/heads/${ctx.branch}`]);
   ctx.log.info(`force-pushed ${ctx.branch}: ${ctx.leaseSha.slice(0, 12)} \u2192 ${headSha.slice(0, 12)}`);
-  const del = await git.run(["push", "--no-verify", "origin", "--delete", `refs/heads/${tempBranch}`], { allowFailure: true });
-  if (del.code !== 0) ctx.log.warning(`could not delete temporary branch ${tempBranch}: ${del.stderr.trim()}`);
-  const prunedBackups = await pruneBackups(git, ctx.branch, keepBackups, ctx.log);
-  return { backupRef, pushed: true, prunedBackups };
+  const result = { backupRef, pushed: true, prunedBackups: [], warnings: [] };
+  try {
+    const del = await git.run(["push", "--no-verify", "origin", "--delete", `refs/heads/${tempBranch}`], { allowFailure: true });
+    if (del.code !== 0) result.warnings.push(`could not delete temporary branch ${tempBranch}: ${del.stderr.trim()}`);
+    result.prunedBackups = await pruneBackups(git, ctx.branch, keepBackups, ctx.log);
+  } catch (e) {
+    result.warnings.push(`published successfully; cleanup failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  for (const warning2 of result.warnings) ctx.log.warning(warning2);
+  return result;
 }
 async function listBackups(git, branch) {
   const lines = await git.lines(["ls-remote", "origin", `${BACKUP_PREFIX}*/${branch}`]);
-  return lines.map((l) => l.split("	")[1]).sort();
+  return lines.map((l) => l.split("	")[1]).filter((ref) => ref.slice(BACKUP_PREFIX.length).split("/").slice(1).join("/") === branch).sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
 }
 async function pruneBackups(git, branch, keep, log) {
   const refs = await listBackups(git, branch);
@@ -46437,7 +46819,7 @@ function classifyPushError(args, err, out = "") {
       [err.trim()]
     );
   }
-  if (/stale info|force-with-lease|rejected/i.test(err)) {
+  if (/stale info|force-with-lease/i.test(err)) {
     return new AutopatchError(
       "FAILED_PUBLISH",
       "the branch moved on GitHub while this run was working, so the force-push was refused to avoid clobbering those commits. The rebased result is on the temporary branch; rerun the workflow.",
@@ -46453,14 +46835,60 @@ function classifyPushError(args, err, out = "") {
   }
   return new AutopatchError("FAILED_PUBLISH", `git ${args.join(" ")} failed: ${err.trim() || out.trim()}`);
 }
-async function fastForward(ctx, upstreamSha) {
-  if (ctx.dryRun) {
-    ctx.log.info(`dry run: would fast-forward ${ctx.branch} ${ctx.leaseSha.slice(0, 12)} \u2192 ${upstreamSha.slice(0, 12)}`);
-    return;
+
+// src/recovery.ts
+var fs16 = __toESM(require("node:fs/promises"), 1);
+var path13 = __toESM(require("node:path"), 1);
+var import_node_crypto3 = require("node:crypto");
+async function saveRecovery(git, plan, destination, records, currentPatch) {
+  const next = `${destination}.next`;
+  await fs16.rm(next, { recursive: true, force: true });
+  await fs16.mkdir(path13.join(next, "files"), { recursive: true });
+  const head = await git.revParse("HEAD");
+  const refs = { original: plan.branchSha, upstream: plan.upstreamSha, partial: head };
+  for (const [name, sha2] of Object.entries(refs)) await git.run(["update-ref", `refs/autopatch/recovery/${name}`, sha2]);
+  await git.run(["bundle", "create", path13.join(next, "history.bundle"), ...Object.keys(refs).map((n) => `refs/autopatch/recovery/${n}`)]);
+  const files = [];
+  for (const rel of new Set(await git.paths(["ls-files", "-z", "--cached", "--others", "--exclude-standard"]))) {
+    await validateFilePath(git.cwd, rel);
+    const abs = path13.join(git.cwd, rel);
+    const st = await fs16.lstat(abs).catch(() => null);
+    if (!st) continue;
+    const file2 = { path: rel, mode: st.mode & 511, blob: null, link: null };
+    if (st.isSymbolicLink()) file2.link = await fs16.readlink(abs);
+    else if (st.isFile()) {
+      file2.blob = (0, import_node_crypto3.createHash)("sha256").update(rel).digest("hex");
+      await fs16.copyFile(abs, path13.join(next, "files", file2.blob));
+    } else continue;
+    files.push(file2);
   }
-  const git = await authed(ctx);
-  await runPush(git, ["push", "--no-verify", `--force-with-lease=refs/heads/${ctx.branch}:${ctx.leaseSha}`, "origin", `${upstreamSha}:refs/heads/${ctx.branch}`]);
-  ctx.log.info(`fast-forwarded ${ctx.branch} to ${upstreamSha.slice(0, 12)}`);
+  const rebase = {};
+  const rebaseDir = await git.gitPath("rebase-merge");
+  for (const name of await fs16.readdir(rebaseDir).catch(() => [])) {
+    const abs = path13.join(rebaseDir, name);
+    if ((await fs16.lstat(abs)).isFile()) rebase[name] = await fs16.readFile(abs, "utf8");
+  }
+  const todo = (rebase["git-rebase-todo"] ?? "").split("\n").map((line) => /^pick ([0-9a-f]+)/.exec(line)?.[1]).filter((s) => !!s);
+  const pending = Object.keys(rebase).length ? plan.patches.filter((p) => p.sha === currentPatch || todo.some((ref) => p.sha.startsWith(ref))).map((p) => p.sha) : head === plan.branchSha ? plan.patches.map((p) => p.sha) : [];
+  const recovery = {
+    version: 1,
+    original: plan.branchSha,
+    upstream: plan.upstreamSha,
+    head,
+    currentPatch,
+    records,
+    pending,
+    index: (await git.run(["ls-files", "--stage", "-z"])).stdout,
+    rebase,
+    files
+  };
+  await fs16.writeFile(path13.join(next, "recovery.json"), JSON.stringify(recovery, null, 2));
+  await fs16.rm(`${destination}.previous`, { recursive: true, force: true });
+  await fs16.rename(destination, `${destination}.previous`).catch((e) => {
+    if (e.code !== "ENOENT") throw e;
+  });
+  await fs16.rename(next, destination);
+  await fs16.rm(`${destination}.previous`, { recursive: true, force: true });
 }
 
 // src/prompts/resolve.ts
@@ -46559,17 +46987,17 @@ function normalizeRepoUrl(u) {
   const s = u.trim().replace(/\/+$/, "").replace(/\.git$/, "");
   const m = /^(?:https?:\/\/|git@|ssh:\/\/git@)([^/:]+)[/:](.+)$/.exec(s);
   if (m) return `${m[1].toLowerCase()}/${m[2].toLowerCase()}`;
-  return path10.resolve(s.replace(/^file:\/\//, ""));
+  return path14.resolve(s.replace(/^file:\/\//, ""));
 }
 async function run(inputs, env, deps) {
   const { log } = deps;
   const startedAt = (/* @__PURE__ */ new Date()).toISOString();
-  const base = path10.join(env.runnerTemp, "autopatch");
-  const resultsDir = path10.join(base, "results");
-  const holdDir = path10.join(base, "hold");
-  const wtDir = path10.join(base, "wt");
-  await fs13.rm(base, { recursive: true, force: true });
-  await fs13.mkdir(resultsDir, { recursive: true });
+  const base = path14.join(env.runnerTemp, "autopatch");
+  const resultsDir = path14.join(base, "results");
+  const holdDir = path14.join(base, "hold");
+  const wtDir = path14.join(base, "wt");
+  await fs17.rm(base, { recursive: true, force: true });
+  await fs17.mkdir(resultsDir, { recursive: true });
   const report = {
     state: "FAILED_PLAN",
     reason: "",
@@ -46591,17 +47019,19 @@ async function run(inputs, env, deps) {
     notes: [],
     error: null
   };
-  const [owner, repo] = inputs.repository.split("/");
   const budget = new Budget(inputs.maxCostUsd);
   let git = null;
   let wt = null;
-  let publishCtx = null;
+  let workPlan = null;
+  let progress = [];
+  let currentPatch = null;
   const finish = async (state, reason) => {
     report.state = state;
     report.reason = reason;
     report.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
     report.costUsd = budget.spentUsd;
     report.agentCalls = budget.calls;
+    report.unpricedCalls = budget.unpricedCalls;
     await writeResults(resultsDir, report, report.consensus?.gates.rangeDiff ?? report.gates?.rangeDiff ?? null);
     return report;
   };
@@ -46609,34 +47039,14 @@ async function run(inputs, env, deps) {
     report.error = { message, details };
     log.warning(`${state}: ${message}`);
     for (const d of details.slice(0, 20)) log.info(`  ${d}`);
-    if (wt && publishCtx && report.tempBranch) {
-      try {
-        const head = await wt.revParse("HEAD");
-        if (head !== report.plan?.branchSha) {
-          await pushTempBranch(publishCtx, head, report.tempBranch);
-          report.headSha = head;
-          report.notes.push(`partial result pushed to ${report.tempBranch} for rescue`);
-        } else {
-          report.tempBranch = null;
-        }
-      } catch (e) {
-        report.notes.push(`could not push the temporary branch: ${e instanceof Error ? e.message : String(e)}`);
-      }
+    if (wt && workPlan && state !== "FAILED_TAMPERED") {
+      await saveRecovery(wt, workPlan, path14.join(resultsDir, "recovery"), progress, currentPatch).catch((e) => report.notes.push(`could not update recovery checkpoint: ${String(e)}`));
+      report.recoveryDir = path14.join(resultsDir, "recovery");
     }
-    if (git && report.tempBranch) report.leftoverBranches = await listLeftoverBranches(git, report.tempBranch).catch(() => []);
-    const result = await finish(state, message);
-    if (deps.issues && !inputs.dryRun) {
-      try {
-        const url2 = await upsertFailureIssue(deps.issues, owner, repo, report.plan?.branch ?? inputs.branch ?? "default branch", renderSummary(report, { forIssue: true, runUrl: env.runUrl }), log);
-        report.notes.push(`issue: ${url2}`);
-        await writeResults(resultsDir, report, null);
-      } catch (e) {
-        log.warning(`could not create or update the failure issue: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
-    return result;
+    return finish(state, message);
   };
   try {
+    await new Git(base).requireSupportedVersion();
     const forkUrl = inputs.forkRemoteUrl ?? `${env.serverUrl}/${inputs.repository}.git`;
     const ws = new Git(env.workspace);
     const wsOrigin = await ws.remoteUrl("origin");
@@ -46644,53 +47054,100 @@ async function run(inputs, env, deps) {
       git = ws;
       log.info(`using the checkout in ${env.workspace}`);
     } else {
-      const cloneDir = path10.join(base, "fork");
+      const cloneDir = path14.join(base, "fork");
       log.info(`cloning ${inputs.repository} into ${cloneDir}`);
-      const cloner = /^https:\/\/github\.com\//.test(forkUrl) ? new Git(base).withConfig(authExtraHeader(inputs.token)) : new Git(base);
-      await fs13.mkdir(base, { recursive: true });
+      const cloner = forkUrl.startsWith("https://") ? new Git(base).withConfig(authExtraHeader(inputs.token, forkUrl)) : new Git(base);
+      await fs17.mkdir(base, { recursive: true });
       await cloner.run(["clone", "--quiet", "--no-tags", forkUrl, cloneDir]);
       git = new Git(cloneDir);
     }
+    git = await git.authenticated(inputs.token);
     if (await git.isShallow()) {
       log.info("unshallowing the checkout");
       await git.run(["fetch", "--unshallow", "--no-tags", "origin"]);
     }
-    await git.ensureRemote("upstream", repoUrl(inputs.upstream));
-    const { branch, upstreamBranch } = await resolveBranches(git, { branch: inputs.branch, upstreamBranch: inputs.upstreamBranch });
+    await git.ensureRemote("upstream", repoUrl(inputs.upstream, env.serverUrl));
+    const upstreamGit = await git.authenticated(inputs.upstreamToken, "upstream");
+    const branch = inputs.branch ?? await git.remoteDefaultBranch("origin");
+    const upstreamBranch = inputs.upstreamBranch ?? await upstreamGit.remoteDefaultBranch("upstream");
+    if (!branch || !upstreamBranch) throw new AutopatchError("FAILED_PLAN", "could not discover default branches; check read credentials or specify branch and upstream_branch");
+    for (const name of [branch, upstreamBranch]) await git.run(["check-ref-format", "--branch", name]);
     await git.run(["fetch", "--no-tags", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`]);
     log.info(`fetching upstream ${inputs.upstream} (${upstreamBranch})`);
-    await git.run(["fetch", "--no-tags", "--prune", "upstream", "+refs/heads/*:refs/remotes/upstream/*"]);
-    const plan = await computePlan(git, { branch, upstreamBranch, branchRev: `refs/remotes/origin/${branch}`, maxPatches: inputs.maxPatches });
-    report.plan = plan;
-    publishCtx = { git, branch, leaseSha: plan.branchSha, runId: env.runId, token: inputs.token, dryRun: inputs.dryRun, log };
-    if (plan.kind === "nothing_to_do") {
-      return await finish("NOTHING_TO_DO", `upstream ${upstreamBranch} has not moved since the last rebase; ${plan.patches.length} patch(es) in place`);
+    await upstreamGit.run(["fetch", "--no-tags", "--prune", "upstream", "+refs/heads/*:refs/remotes/upstream/*"]);
+    const checkpointSha = await fetchCheckpoint(git, branch);
+    const planned = await computePlan(git, {
+      branch,
+      upstreamBranch,
+      branchRev: `refs/remotes/origin/${branch}`,
+      maxPatches: inputs.maxPatches,
+      checkpointSha,
+      initialBase: inputs.initialBase
+    });
+    report.plan = planned;
+    if (planned.kind === "nothing_to_do") {
+      report.headSha = planned.branchSha;
+      return await finish("NOTHING_TO_DO", `upstream ${upstreamBranch} has not moved since the last rebase; ${planned.patches.length} patch(es) in place`);
     }
-    if (plan.kind === "fast_forward") {
-      await fastForward(publishCtx, plan.upstreamSha);
-      report.headSha = plan.upstreamSha;
-      return await finish("FAST_FORWARDED", `fork carries no patches; fast-forwarded ${branch} to upstream ${plan.upstreamSha.slice(0, 12)}${inputs.dryRun ? " (dry run: not pushed)" : ""}`);
-    }
+    const plan = planned.kind === "rebase" ? planned : {
+      ...planned,
+      kind: "rebase",
+      base: planned.branchSha,
+      patches: [],
+      expectedSurvivors: 0,
+      upstreamCommits: await git.revListCount(`${planned.branchSha}..${planned.upstreamSha}`),
+      workflowPaths: []
+    };
+    workPlan = plan;
+    const independent = !!inputs.reviewer && (inputs.reviewer.backend !== inputs.worker.backend || inputs.worker.backend === "fake");
+    const autoEligible = independent && !!inputs.verifyCommand && !!(checkpointSha || inputs.initialBase);
+    if (!autoEligible) report.notes.push("automatic publishing requires independent review, verify_command, and an existing upstream checkpoint or explicit initial_base; candidate will be staged");
     log.info(`${plan.patches.length} patch(es) to rebase over ${plan.upstreamCommits} new upstream commit(s); ${plan.patches.filter((p) => p.absorbed).length} already upstream`);
     if (plan.workflowPaths.length) log.info(`workflow files involved (token needs Workflows permission): ${plan.workflowPaths.join(", ")}`);
     report.tempBranch = tempBranchName(env.runId, env.runAttempt);
-    wt = await git.worktreeAdd(wtDir, plan.branchSha);
+    wt = await new Git(git.cwd).worktreeAdd(wtDir, planned.kind === "fast_forward" ? plan.upstreamSha : plan.branchSha);
     await wt.run(["switch", "-q", "-C", report.tempBranch]);
     const makeBackend = deps.createBackend ?? ((name) => createBackend(name, inputs, log));
     const workerBackend = makeBackend(inputs.worker.backend);
+    const installedBackends = [workerBackend];
+    const checkCapabilities = (backend) => {
+      if (inputs.requireHardLimits && (!backend.capabilities?.budgetLimit || !backend.capabilities.turnLimit)) {
+        throw new AutopatchError("FAILED_PLAN", `${backend.name} cannot enforce dollar and turn limits; require_hard_limits is incompatible with this backend`);
+      }
+    };
+    checkCapabilities(workerBackend);
     await workerBackend.ensureInstalled(inputs.installClis);
     const timeoutMs = inputs.agentTimeoutMinutes * 6e4;
-    const runnerOpts = { budget, maxTurns: inputs.maxTurns, timeoutMs, transcriptsDir: path10.join(resultsDir, "transcripts"), log };
+    const runnerOpts = { budget, maxTurns: inputs.maxTurns, timeoutMs, transcriptsDir: path14.join(resultsDir, "transcripts"), log };
     const worker = new AgentRunner({ ...runnerOpts, backend: workerBackend, model: inputs.worker.model, role: "worker", env: buildChildEnv(backendEnv(inputs.worker.backend, inputs)) });
     let reviewer = null;
     if (inputs.reviewer) {
       const reviewerBackend = inputs.reviewer.backend === inputs.worker.backend ? workerBackend : makeBackend(inputs.reviewer.backend);
-      await reviewerBackend.ensureInstalled(inputs.installClis);
+      checkCapabilities(reviewerBackend);
+      if (reviewerBackend !== workerBackend) await reviewerBackend.ensureInstalled(inputs.installClis);
+      if (!installedBackends.includes(reviewerBackend)) installedBackends.push(reviewerBackend);
       reviewer = new AgentRunner({ ...runnerOpts, backend: reviewerBackend, model: inputs.reviewer.model, role: "reviewer", env: buildChildEnv(backendEnv(inputs.reviewer.backend, inputs)) });
     } else {
       report.notes.push("no reviewer configured: only the worker self-check gated this rebase");
     }
-    const outcome = await log.group("rebase", () => runRebase({ git: wt, plan, worker: makeWorker(worker, plan, wtDir), holdDir, log }));
+    report.backendVersions = {};
+    for (const backend of installedBackends) {
+      report.backendVersions[backend.name] = backend.version ?? "scripted";
+    }
+    for (const backend of installedBackends) {
+      if (!backend.capabilities?.costReporting) {
+        report.notes.push(`${backend.name} does not report dollars; its wall-clock timeout is enforced and total cost is incomplete`);
+      }
+    }
+    const onProgress = async (records, active) => {
+      progress = records;
+      currentPatch = active;
+      report.recoveryDir = path14.join(resultsDir, "recovery");
+      await saveRecovery(wt, plan, report.recoveryDir, records, active);
+      await fs17.writeFile(path14.join(resultsDir, "progress.json"), JSON.stringify({ plan, records, currentPatch: active }, null, 2));
+    };
+    await onProgress([], null);
+    const outcome = planned.kind === "fast_forward" ? { headSha: plan.upstreamSha, records: [], conflictsResolved: 0, mapping: /* @__PURE__ */ new Map() } : await log.group("rebase", () => runRebase({ git: wt, plan, worker: makeWorker(worker, plan, wtDir), holdDir, log, onProgress }));
     report.outcome = outcome;
     report.headSha = outcome.headSha;
     const gatesFn = () => runGates({
@@ -46700,11 +47157,27 @@ async function run(inputs, env, deps) {
       verifyCommand: inputs.verifyCommand,
       verifyTimeoutMs: timeoutMs,
       env: buildChildEnv(),
-      log
+      log,
+      sandbox: inputs.sandbox ?? false
     });
     const consensus = await log.group(
       "review",
-      () => runConsensus({ git: wt, plan, outcome, worker, reviewer, maxRounds: inputs.maxRounds, runGates: gatesFn, holdDir, log })
+      () => runConsensus({
+        git: wt,
+        plan,
+        outcome,
+        worker,
+        reviewer,
+        maxRounds: inputs.maxRounds,
+        runGates: gatesFn,
+        holdDir,
+        log,
+        onProgress: async (rounds, gates) => {
+          report.gates = gates;
+          await fs17.writeFile(path14.join(resultsDir, "review-progress.json"), JSON.stringify({ rounds, gates }, null, 2));
+          await onProgress(outcome.records, null);
+        }
+      })
     );
     report.consensus = consensus;
     report.gates = consensus.gates;
@@ -46713,21 +47186,19 @@ async function run(inputs, env, deps) {
     if (consensus.state !== "APPROVED") {
       return await fail(consensus.state === "CONTESTED" ? "FAILED_CONTESTED" : "FAILED_GATE", consensus.reason, consensus.gates.failures);
     }
-    await pushTempBranch(publishCtx, consensus.headSha, report.tempBranch);
-    report.leftoverBranches = await listLeftoverBranches(git, report.tempBranch).catch(() => []);
-    if (inputs.publish === "stage") {
-      return await finish("STAGED", `${consensus.reason}; result left on ${report.tempBranch} (publish=stage)`);
-    }
-    report.publish = await publishBranch(publishCtx, consensus.headSha, report.tempBranch, inputs.keepBackups);
-    if (deps.issues && !inputs.dryRun) {
-      await closeFailureIssue(deps.issues, owner, repo, branch, `Resolved: run ${env.runUrl ?? env.runId} rebased \`${branch}\` onto upstream ${plan.upstreamSha.slice(0, 12)}.`, log).catch(
-        (e) => log.warning(`could not close the failure issue: ${e instanceof Error ? e.message : String(e)}`)
-      );
-    }
-    return await finish(
-      "APPROVED",
-      `${consensus.reason}; ${inputs.dryRun ? "dry run: nothing pushed" : `${branch} force-pushed to ${consensus.headSha.slice(0, 12)} (old tip backed up as ${report.publish.backupRef})`}`
-    );
+    await assertCandidate(wt, consensus.gates.candidate);
+    report.artifactDir = path14.join(resultsDir, "candidate");
+    report.artifactDigest = await writeCandidate(wt, report.artifactDir, plan, outcome, {
+      runId: env.runId,
+      runAttempt: env.runAttempt,
+      repository: inputs.repository,
+      upstream: inputs.upstream,
+      checkpointSha: checkpointSha ?? null,
+      kind: planned.kind,
+      autoEligible,
+      verifyCommand: inputs.verifyCommand ?? null
+    });
+    return await finish("PREPARED", `${consensus.reason}; immutable candidate exported for isolated verification`);
   } catch (err) {
     if (err instanceof AutopatchError) return await fail(err.state, err.message, err.details);
     const message = err instanceof Error ? err.stack ?? err.message : String(err);
@@ -46737,6 +47208,218 @@ async function run(inputs, env, deps) {
   }
 }
 
+// src/phases.ts
+var fs18 = __toESM(require("node:fs/promises"), 1);
+var path15 = __toESM(require("node:path"), 1);
+
+// src/issue.ts
+var ISSUE_LABEL = "autopatch";
+function issueTitle(branch) {
+  return `autopatch: rebase of ${branch} needs attention`;
+}
+async function ensureLabel(api, owner, repo) {
+  try {
+    await api.getLabel({ owner, repo, name: ISSUE_LABEL });
+  } catch {
+    await api.createLabel({ owner, repo, name: ISSUE_LABEL, color: "7057ff", description: "Opened by the autopatch action when a rebase needs a human" }).catch(() => void 0);
+  }
+}
+async function findOpen(api, owner, repo, title) {
+  const { data } = await api.listForRepo({ owner, repo, state: "open", labels: ISSUE_LABEL, per_page: 50 });
+  return data.find((i) => i.title === title)?.number;
+}
+async function upsertFailureIssue(api, owner, repo, branch, body, log) {
+  await ensureLabel(api, owner, repo);
+  const title = issueTitle(branch);
+  const existing = await findOpen(api, owner, repo, title);
+  if (existing) {
+    const { data: data2 } = await api.update({ owner, repo, issue_number: existing, body });
+    await api.createComment({ owner, repo, issue_number: existing, body: "A new autopatch run failed; the issue body was updated with the latest details." });
+    log.info(`updated issue #${existing}`);
+    return data2.html_url;
+  }
+  const { data } = await api.create({ owner, repo, title, body, labels: [ISSUE_LABEL] });
+  log.info(`opened issue #${data.number}`);
+  return data.html_url;
+}
+async function closeFailureIssue(api, owner, repo, branch, comment, log) {
+  const existing = await findOpen(api, owner, repo, issueTitle(branch));
+  if (!existing) return;
+  await api.createComment({ owner, repo, issue_number: existing, body: comment });
+  await api.update({ owner, repo, issue_number: existing, state: "closed", state_reason: "completed" });
+  log.info(`closed issue #${existing}`);
+}
+
+// src/phases.ts
+function checkContext(candidate, inputs, env) {
+  if (candidate.runId !== env.runId || candidate.runAttempt !== env.runAttempt || candidate.repository !== inputs.repository || candidate.upstream !== inputs.upstream || inputs.branch && candidate.branch !== inputs.branch || inputs.upstreamBranch && candidate.upstreamBranch !== inputs.upstreamBranch || candidate.verifyCommand !== (inputs.verifyCommand ?? null)) {
+    throw new AutopatchError("FAILED_TAMPERED", "candidate does not match this run, repository, branch, upstream, or verification command");
+  }
+}
+async function runPhase(inputs, env, deps) {
+  const { log } = deps;
+  const phase = inputs.phase;
+  if (phase !== "verify" && phase !== "publish" && phase !== "report") throw new Error("runPhase requires verify, publish, or report");
+  const base = path15.join(env.runnerTemp, `autopatch-${phase}`);
+  await fs18.rm(base, { recursive: true, force: true });
+  const resultsDir = path15.join(base, "results");
+  await fs18.mkdir(resultsDir, { recursive: true });
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  if (phase === "report") {
+    if (!inputs.artifactDir || !inputs.resultsDigest) throw new Error("report requires artifact_dir and results_digest from the failed job");
+    const failed = await readBoundJson(path15.join(inputs.artifactDir, "results.json"), inputs.resultsDigest);
+    if (failed.repository !== inputs.repository || failed.upstream !== inputs.upstream || failed.runId !== env.runId || !failed.state.startsWith("FAILED_")) {
+      throw new AutopatchError("FAILED_TAMPERED", "failure report does not match this run");
+    }
+    if (deps.issues && !inputs.dryRun) {
+      const [owner, repo] = inputs.repository.split("/");
+      const url2 = await upsertFailureIssue(
+        deps.issues,
+        owner,
+        repo,
+        inputs.branch ?? failed.plan?.branch ?? "default branch",
+        renderSummary(failed, { forIssue: true, runUrl: env.runUrl }),
+        log
+      );
+      failed.notes.push(`issue: ${url2}`);
+    }
+    await writeResults(resultsDir, failed, null);
+    return failed;
+  }
+  const report = {
+    state: "FAILED_GATE",
+    reason: "",
+    repository: inputs.repository,
+    upstream: inputs.upstream,
+    runId: env.runId,
+    startedAt: now,
+    finishedAt: now,
+    plan: null,
+    outcome: null,
+    consensus: null,
+    gates: null,
+    publish: null,
+    tempBranch: null,
+    headSha: null,
+    leftoverBranches: [],
+    costUsd: 0,
+    agentCalls: 0,
+    notes: [],
+    error: null
+  };
+  try {
+    if (!inputs.artifactDir || !inputs.candidateDigest) throw new AutopatchError("FAILED_PLAN", "artifact_dir and candidate_digest from the prepare job are required");
+    const { git, candidate, plan } = await importCandidate(inputs.artifactDir, inputs.candidateDigest, path15.join(base, "repo"), phase === "publish");
+    checkContext(candidate, inputs, env);
+    report.plan = candidate.kind === "fast_forward" ? {
+      kind: "fast_forward",
+      branch: candidate.branch,
+      branchSha: candidate.originalSha,
+      upstreamBranch: candidate.upstreamBranch,
+      upstreamRef: plan.upstreamRef,
+      upstreamSha: candidate.upstreamSha
+    } : plan;
+    report.headSha = candidate.headSha;
+    report.outcome = {
+      headSha: candidate.headSha,
+      conflictsResolved: 0,
+      mapping: new Map(candidate.patches.filter((p) => p.current !== null).map((p) => [p.original, p.current])),
+      records: candidate.patches.map((p, i) => ({
+        sha: p.original,
+        subject: plan.patches[i].subject,
+        result: p.result,
+        newSha: p.current,
+        conflicts: [],
+        report: null,
+        extraPaths: []
+      }))
+    };
+    if (phase === "verify") {
+      const gates = await runGates({
+        git,
+        plan,
+        expectedCount: report.outcome.mapping.size,
+        verifyCommand: inputs.verifyCommand,
+        verifyTimeoutMs: inputs.agentTimeoutMinutes * 6e4,
+        env: buildChildEnv(),
+        log,
+        sandbox: inputs.sandbox ?? false
+      });
+      report.gates = gates;
+      if (!gates.ok) throw new AutopatchError("FAILED_GATE", "isolated verification failed", gates.failures);
+      await assertCandidate(git, candidate);
+      report.artifactDir = path15.join(resultsDir, "verification");
+      await fs18.mkdir(report.artifactDir);
+      const file2 = path15.join(report.artifactDir, "verification.json");
+      await fs18.writeFile(file2, JSON.stringify(verificationSchema.parse({
+        version: 1,
+        runId: env.runId,
+        runAttempt: env.runAttempt,
+        candidateDigest: inputs.candidateDigest,
+        headSha: candidate.headSha,
+        treeSha: candidate.treeSha,
+        verifyCommand: inputs.verifyCommand ?? null,
+        passed: true
+      }), null, 2));
+      report.artifactDigest = await fileDigest(file2);
+      report.state = "VERIFIED";
+      report.reason = "the exact candidate passed verification on a fresh checkout";
+    } else {
+      if (!inputs.verificationDir || !inputs.verificationDigest) throw new AutopatchError("FAILED_PLAN", "verification_dir and verification_digest from the verification job are required");
+      const verification = verificationSchema.parse(await readBoundJson(path15.join(inputs.verificationDir, "verification.json"), inputs.verificationDigest));
+      if (verification.candidateDigest !== inputs.candidateDigest || verification.runId !== env.runId || verification.runAttempt !== env.runAttempt || verification.headSha !== candidate.headSha || verification.treeSha !== candidate.treeSha || verification.verifyCommand !== (inputs.verifyCommand ?? null)) {
+        throw new AutopatchError("FAILED_TAMPERED", "verification belongs to a different candidate, run, or command");
+      }
+      await git.ensureRemote("origin", inputs.forkRemoteUrl ?? `${env.serverUrl}/${inputs.repository}.git`);
+      const remote = await git.authenticated(inputs.token);
+      const branch = inputs.branch ?? await remote.remoteDefaultBranch("origin");
+      if (branch !== candidate.branch) throw new AutopatchError("FAILED_PLAN", "candidate branch differs from the maintained branch");
+      const checkpointSha = await fetchCheckpoint(remote, branch);
+      if ((checkpointSha ?? null) !== candidate.checkpointSha) throw new AutopatchError("FAILED_PUBLISH", "upstream checkpoint changed since planning");
+      const ctx = {
+        git: remote,
+        branch,
+        leaseSha: candidate.originalSha,
+        upstreamSha: candidate.upstreamSha,
+        checkpointSha: checkpointSha ?? null,
+        runId: env.runId,
+        runAttempt: env.runAttempt,
+        token: inputs.token,
+        dryRun: inputs.dryRun,
+        log
+      };
+      report.tempBranch = tempBranchName(env.runId, env.runAttempt);
+      await pushTempBranch(ctx, candidate.headSha, report.tempBranch);
+      report.tempBranchRemote = !inputs.dryRun;
+      report.leftoverBranches = await listLeftoverBranches(remote, report.tempBranch).catch(() => []);
+      if (inputs.publish === "stage" || !candidate.autoEligible) {
+        report.state = "STAGED";
+        report.reason = `${inputs.dryRun ? "dry run: would stage" : "staged"} verified candidate on ${report.tempBranch}; default branch was not updated`;
+      } else {
+        report.publish = await publishBranch(ctx, candidate.headSha, report.tempBranch, inputs.keepBackups);
+        report.notes.push(...report.publish.warnings ?? []);
+        report.state = candidate.kind === "fast_forward" ? "FAST_FORWARDED" : "APPROVED";
+        report.reason = inputs.dryRun ? "dry run: verified candidate was not pushed" : `published verified candidate ${candidate.headSha}`;
+        if (deps.issues && !inputs.dryRun) {
+          const [owner, repo] = inputs.repository.split("/");
+          await closeFailureIssue(deps.issues, owner, repo, branch, report.reason, log).catch((e) => report.notes.push(`issue cleanup failed: ${String(e)}`));
+        }
+      }
+    }
+  } catch (e) {
+    report.state = e instanceof AutopatchError ? e.state : phase === "publish" ? "FAILED_PUBLISH" : "FAILED_GATE";
+    report.reason = e instanceof Error ? e.message : String(e);
+    report.error = { message: report.reason, details: e instanceof AutopatchError ? e.details : [] };
+    if (phase === "publish" && deps.issues && !inputs.dryRun) {
+      const [owner, repo] = inputs.repository.split("/");
+      await upsertFailureIssue(deps.issues, owner, repo, report.plan?.branch ?? inputs.branch ?? "default branch", renderSummary(report, { forIssue: true }), log).catch((err) => report.notes.push(`issue reporting failed: ${String(err)}`));
+    }
+  }
+  report.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+  await writeResults(resultsDir, report, report.gates?.rangeDiff ?? null);
+  return report;
+}
+
 // src/main.ts
 async function main() {
   const inputs = parseInputs(readRawInputs());
@@ -46744,6 +47427,10 @@ async function main() {
   setSecret(Buffer.from(`x-access-token:${inputs.token}`).toString("base64"));
   if (inputs.anthropicApiKey) setSecret(inputs.anthropicApiKey);
   if (inputs.openaiApiKey) setSecret(inputs.openaiApiKey);
+  if (inputs.upstreamToken) {
+    setSecret(inputs.upstreamToken);
+    setSecret(Buffer.from(`x-access-token:${inputs.upstreamToken}`).toString("base64"));
+  }
   const env = {
     runId: process.env.GITHUB_RUN_ID ?? String(Date.now()),
     runAttempt: process.env.GITHUB_RUN_ATTEMPT ?? "1",
@@ -46752,16 +47439,20 @@ async function main() {
     serverUrl: process.env.GITHUB_SERVER_URL ?? "https://github.com",
     runUrl: process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY && process.env.GITHUB_RUN_ID ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}` : void 0
   };
-  const issues = getOctokit(inputs.token).rest.issues;
-  const report = await run(inputs, env, { log: coreLogger, issues });
+  const issues = inputs.forkRemoteUrl ? null : getOctokit(inputs.token).rest.issues;
+  const report = inputs.phase === "prepare" ? await run(inputs, env, { log: coreLogger, issues: null }) : await runPhase(inputs, env, { log: coreLogger, issues: inputs.phase === "publish" || inputs.phase === "report" ? issues : null });
   setOutput("state", report.state);
   setOutput("branch_sha", report.headSha ?? "");
   setOutput("backup_ref", report.publish?.backupRef ?? "");
   setOutput("temp_branch", report.publish?.pushed ? "" : report.tempBranch ?? "");
-  setOutput("results_dir", `${env.runnerTemp}/autopatch/results`);
+  const resultsDir = `${env.runnerTemp}/${inputs.phase === "prepare" ? "autopatch" : `autopatch-${inputs.phase}`}/results`;
+  setOutput("results_dir", resultsDir);
+  setOutput("results_digest", await fileDigest(`${resultsDir}/results.json`));
+  setOutput("artifact_dir", report.artifactDir ?? "");
+  setOutput("artifact_digest", report.artifactDigest ?? "");
   await summary.addRaw(renderSummary(report, { forIssue: false, runUrl: env.runUrl })).write();
   if (report.state.startsWith("FAILED_")) setFailed(`${report.state}: ${report.reason}`);
-  else info(`${report.state}: ${report.reason}`);
+  else coreLogger.info(`${report.state}: ${report.reason}`);
 }
 main().catch((err) => {
   setFailed(err instanceof Error ? err.stack ?? err.message : String(err));

@@ -6,6 +6,7 @@ import type { Logger } from './log.js';
 import type { Patch, RebasePlan } from './plan.js';
 import { quarantine } from './quarantine.js';
 import type { ResolveReport } from './schemas.js';
+import { guardGit, validateFilePath } from './state.js';
 
 export type ConflictKind = 'content' | 'deleted_upstream' | 'deleted_by_patch' | 'both_added' | 'other';
 
@@ -76,6 +77,7 @@ export interface RebaseOptions {
   maxAttemptsPerConflict?: number;
   /** Character caps for prompt material. */
   caps?: { patchShow?: number; file?: number; diff?: number };
+  onProgress?: (records: PatchRecord[], currentPatch: string | null) => Promise<void>;
 }
 
 /** Config that makes the rebase deterministic regardless of user or runner configuration. */
@@ -104,6 +106,7 @@ async function exists(p: string): Promise<boolean> {
 
 export async function isBinaryFile(abs: string): Promise<boolean> {
   try {
+    if (!(await fs.lstat(abs)).isFile()) return false;
     const fh = await fs.open(abs, 'r');
     try {
       const buf = Buffer.alloc(8000);
@@ -118,6 +121,8 @@ export async function isBinaryFile(abs: string): Promise<boolean> {
 }
 
 export async function hasConflictMarkers(abs: string): Promise<boolean> {
+  const st = await fs.lstat(abs);
+  if (!st.isFile()) return false;
   if (await isBinaryFile(abs)) return false;
   const content = await fs.readFile(abs, 'utf8');
   return MARKER_RE.test(content);
@@ -130,24 +135,6 @@ function classify(stages: Set<1 | 2 | 3>): ConflictKind {
   if (has(1) && has(2) && !has(3)) return 'deleted_by_patch';
   if (!has(1) && has(2) && has(3)) return 'both_added';
   return 'other';
-}
-
-interface Fingerprint {
-  head: string;
-  rebaseHead: string | undefined;
-  rebaseDir: boolean;
-  refs: string;
-  stash: string;
-}
-
-async function fingerprint(git: Git): Promise<Fingerprint> {
-  return {
-    head: await git.out(['rev-parse', 'HEAD']),
-    rebaseHead: await git.tryRevParse('REBASE_HEAD'),
-    rebaseDir: await exists(await git.gitPath('rebase-merge')),
-    refs: await git.out(['for-each-ref', '--format=%(refname) %(objectname)']),
-    stash: (await git.run(['stash', 'list'], { allowFailure: true })).stdout,
-  };
 }
 
 function cap(text: string, max: number): string {
@@ -194,6 +181,7 @@ export async function runRebase(o: RebaseOptions): Promise<RebaseOutcome> {
       throw new AutopatchError('FAILED_REBASE', `git rebase failed outside of a conflict: ${r.stderr.trim() || r.stdout.trim()}`);
     }
     const rebaseHead = await git.tryRevParse('REBASE_HEAD');
+    await o.onProgress?.([...records.values()], rebaseHead ?? null);
     const patch = plan.patches.find((p) => p.sha === rebaseHead);
     if (!patch) {
       throw new AutopatchError('FAILED_REBASE', `rebase stopped on unknown commit ${rebaseHead ?? '(none)'}`);
@@ -204,38 +192,24 @@ export async function runRebase(o: RebaseOptions): Promise<RebaseOutcome> {
     if (unmerged.size === 0) {
       if (await git.indexIsEmpty()) {
         log.info(`patch ${index}/${total} "${patch.subject}" became empty on the new base; skipping`);
-        record(patch, { result: 'became_empty' });
+      record(patch, { result: 'became_empty' });
+      await o.onProgress?.([...records.values()], patch.sha);
         r = await git.run(['rebase', '--skip'], { allowFailure: true });
         continue;
       }
       throw new AutopatchError('FAILED_REBASE', `rebase stopped on "${patch.subject}" with staged changes but no conflicts: ${r.stderr.trim()}`);
     }
 
-    // Paths rerere already resolved in the worktree (from an earlier identical conflict) need no agent.
-    const remaining = new Set((await git.run(['rerere', 'remaining'], { allowFailure: true })).stdout.split('\n').filter(Boolean));
-    const preResolved = [...unmerged.keys()].filter((p) => remaining.size > 0 && !remaining.has(p));
-    for (const p of preResolved) {
-      if (await hasConflictMarkers(path.join(git.cwd, p))) {
-        remaining.add(p);
-        continue;
-      }
-      await git.run(['add', '--', p]);
-      log.info(`patch ${index}/${total}: ${p} resolved from rerere cache`);
-    }
+    // Every unmerged index entry needs an explicit resolution, including binary/rename conflicts.
     const conflictPaths: ConflictPath[] = [];
     for (const [p, stages] of unmerged) {
-      if (remaining.size > 0 && !remaining.has(p)) continue;
+      await validateFilePath(git.cwd, p);
       conflictPaths.push({
         path: p,
         kind: classify(stages),
         binary: await isBinaryFile(path.join(git.cwd, p)),
         stages: [...stages].sort(),
       });
-    }
-    if (conflictPaths.length === 0) {
-      record(patch, { result: 'rerere', conflicts: [], extraPaths: [] });
-      r = await git.run(['rebase', '--continue'], { allowFailure: true });
-      continue;
     }
 
     log.info(`patch ${index}/${total} "${patch.subject}" conflicts in ${conflictPaths.length} file(s): ${conflictPaths.map((c) => `${c.path} [${c.kind}${c.binary ? ', binary' : ''}]`).join(', ')}`);
@@ -252,10 +226,11 @@ export async function runRebase(o: RebaseOptions): Promise<RebaseOutcome> {
       previousProblems: [],
     };
     for (const c of conflictPaths) {
+      await validateFilePath(git.cwd, c.path);
       const abs = path.join(git.cwd, c.path);
       ctx.workingCopies.push({
         path: c.path,
-        content: c.binary || !(await exists(abs)) ? null : cap(await fs.readFile(abs, 'utf8'), caps.file),
+        content: c.binary || !(await exists(abs)) || (await fs.lstat(abs)).isSymbolicLink() ? null : cap(await fs.readFile(abs, 'utf8'), caps.file),
       });
       ctx.upstreamDelta.push({
         path: c.path,
@@ -268,20 +243,10 @@ export async function runRebase(o: RebaseOptions): Promise<RebaseOutcome> {
     let extraPaths: string[] = [];
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       ctx.attempt = attempt;
-      const before = await fingerprint(git);
-      const q = await quarantine(git.cwd, o.holdDir, conflictPaths.map((c) => c.path));
-      try {
-        report = await o.worker.resolve(ctx);
-      } finally {
-        await q.restore();
-      }
-      const after = await fingerprint(git);
-      if (JSON.stringify(before) !== JSON.stringify(after)) {
-        throw new AutopatchError('FAILED_TAMPERED', `worker changed git state while resolving "${patch.subject}" (it must only edit files)`, [
-          `before: ${JSON.stringify(before)}`,
-          `after:  ${JSON.stringify(after)}`,
-        ]);
-      }
+      report = await guardGit(git, 'edit', 'conflict worker', async () => {
+        const q = await quarantine(git.cwd, o.holdDir, conflictPaths.map((c) => c.path));
+        try { return await o.worker.resolve(ctx); } finally { await q.restore(); }
+      });
       if (report.status === 'need_help') {
         throw new AutopatchError('FAILED_REBASE', `worker could not resolve "${patch.subject}": ${report.summary}`, report.risks);
       }
@@ -299,11 +264,13 @@ export async function runRebase(o: RebaseOptions): Promise<RebaseOutcome> {
     if (report.status === 'skip_patch') {
       log.info(`patch ${index}/${total} "${patch.subject}" skipped by worker: ${report.summary}`);
       record(patch, { result: 'skipped', conflicts: conflictPaths, report, extraPaths });
+      await o.onProgress?.([...records.values()], patch.sha);
       r = await git.run(['rebase', '--skip'], { allowFailure: true });
       continue;
     }
     conflictsResolved += 1;
     record(patch, { result: 'applied', conflicts: conflictPaths, report, extraPaths });
+    await o.onProgress?.([...records.values()], patch.sha);
     r = await git.run(['rebase', '--continue'], { allowFailure: true });
   }
 
@@ -329,6 +296,7 @@ export async function runRebase(o: RebaseOptions): Promise<RebaseOutcome> {
     rec.newSha = newSha;
   });
   const ordered = plan.patches.map((p) => records.get(p.sha) as PatchRecord);
+  await o.onProgress?.(ordered, null);
   log.info(`rebase complete: ${newShas.length} patch(es) on ${plan.upstreamSha.slice(0, 12)}, ${conflictsResolved} conflict(s) resolved`);
   return { headSha, records: ordered, conflictsResolved, mapping };
 }
@@ -353,10 +321,7 @@ export async function applyReport(git: Git, report: ResolveReport, conflicts: Co
 
   const extraPaths: string[] = [];
   for (const f of report.files) {
-    if (f.path.includes('..') || path.isAbsolute(f.path)) {
-      problems.push(`invalid path in report: ${f.path}`);
-      continue;
-    }
+    await validateFilePath(git.cwd, f.path);
     const abs = path.join(git.cwd, f.path);
     const c = conflictMap.get(f.path);
     if (!c) extraPaths.push(f.path);

@@ -8,7 +8,8 @@ dir="${1:?usage: e2e-fixture.sh <dir>}"
 rm -rf "$dir"
 mkdir -p "$dir"
 export GIT_AUTHOR_NAME=Fixture GIT_AUTHOR_EMAIL=fixture@example.com GIT_COMMITTER_NAME=Fixture GIT_COMMITTER_EMAIL=fixture@example.com
-g() { git -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+g() { git -c commit.gpgsign=false -c core.hooksPath=/dev/null -c maintenance.auto=false -c gc.auto=0 "$@"; }
 
 g init -q --bare --initial-branch=main "$dir/upstream.git"
 g clone -q "$dir/upstream.git" "$dir/upstream-work"

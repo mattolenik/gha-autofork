@@ -38,6 +38,10 @@ export const BASE_GIT_ENV: Record<string, string> = {
   GIT_MERGE_AUTOEDIT: 'no',
   GIT_TERMINAL_PROMPT: '0',
   GIT_PAGER: 'cat',
+  GIT_CONFIG_NOSYSTEM: '1',
+  GIT_CONFIG_GLOBAL: '/dev/null',
+  GIT_LITERAL_PATHSPECS: '1',
+  GIT_OPTIONAL_LOCKS: '0',
   LC_ALL: 'C',
 };
 
@@ -82,6 +86,10 @@ export class Git {
       'advice.mergeConflict': 'false',
       'core.autocrlf': 'false',
       'color.ui': 'never',
+      'maintenance.auto': 'false',
+      'gc.auto': '0',
+      'core.fsmonitor': 'false',
+      'protocol.ext.allow': 'never',
       ...options.config,
     };
     this.env = { ...baseEnvFromProcess(), ...BASE_GIT_ENV, ...options.env };
@@ -99,7 +107,9 @@ export class Git {
   async run(args: string[], options: GitRunOptions = {}): Promise<GitResult> {
     const configArgs: string[] = [];
     for (const [k, v] of Object.entries(this.config)) configArgs.push('-c', `${k}=${v}`);
-    const fullArgs = [...configArgs, ...args];
+    const commandArgs = ['diff', 'show', 'log', 'range-diff'].includes(args[0] ?? '')
+      ? [args[0]!, '--no-ext-diff', '--no-textconv', ...args.slice(1)] : args;
+    const fullArgs = [...configArgs, ...commandArgs];
     const result = await new Promise<GitResult>((resolve) => {
       const child = execFile(
         'git',
@@ -109,7 +119,8 @@ export class Git {
           env: { ...this.env, ...options.env },
           maxBuffer: 256 * 1024 * 1024,
           encoding: 'utf8',
-          ...(options.timeoutMs ? { timeout: options.timeoutMs, killSignal: 'SIGKILL' as const } : {}),
+          timeout: options.timeoutMs ?? 5 * 60_000,
+          killSignal: 'SIGKILL',
         },
         (err, stdout, stderr) => {
           const code =
@@ -121,9 +132,8 @@ export class Git {
           resolve({ code, stdout: String(stdout), stderr: String(stderr) });
         },
       );
-      if (options.input !== undefined) {
-        child.stdin?.end(options.input);
-      }
+      child.stdin?.on('error', () => undefined);
+      child.stdin?.end(options.input);
     });
     if (result.code !== 0 && !options.allowFailure) {
       throw new GitError(args, result);
@@ -139,6 +149,31 @@ export class Git {
   /** Run and return non-empty stdout lines. */
   async lines(args: string[], options: GitRunOptions = {}): Promise<string[]> {
     return (await this.run(args, options)).stdout.split('\n').filter((l) => l.length > 0);
+  }
+
+  async paths(args: string[]): Promise<string[]> {
+    return (await this.run(args)).stdout.split('\0').filter(Boolean);
+  }
+
+  async tree(ref = 'HEAD'): Promise<string> {
+    return this.out(['rev-parse', '--verify', `${ref}^{tree}`]);
+  }
+
+  async commonDir(): Promise<string> {
+    return path.resolve(this.cwd, await this.out(['rev-parse', '--git-common-dir']));
+  }
+
+  async requireSupportedVersion(): Promise<void> {
+    const version = await this.out(['--version']);
+    const match = /git version (\d+)\.(\d+)/.exec(version);
+    if (!match || Number(match[1]) < 2 || (Number(match[1]) === 2 && Number(match[2]) < 45)) {
+      throw new Error(`Git 2.45 or newer is required (--empty=stop); found ${version}`);
+    }
+  }
+
+  async authenticated(token: string | undefined, remote = 'origin'): Promise<Git> {
+    const url = await this.remoteUrl(remote);
+    return token && url?.startsWith('https://') ? this.withConfig(authExtraHeader(token, url)) : this;
   }
 
   async revParse(ref: string): Promise<string> {
@@ -220,7 +255,8 @@ export class Git {
   }
 
   async statusPorcelain(): Promise<string[]> {
-    return this.lines(['status', '--porcelain=v1', '--untracked-files=all']);
+    // Disable rename detection so each record describes exactly one literal path.
+    return this.paths(['status', '--porcelain=v1', '-z', '--no-renames', '--untracked-files=all']);
   }
 
   async indexIsEmpty(): Promise<boolean> {
@@ -252,7 +288,9 @@ export function repoUrl(spec: string, host = 'https://github.com'): string {
 }
 
 /** Config entry that authenticates HTTPS pushes to github.com without touching .git/config. */
-export function authExtraHeader(token: string): Record<string, string> {
+export function authExtraHeader(token: string, remoteUrl = 'https://github.com/'): Record<string, string> {
+  const url = new URL(remoteUrl);
+  if (url.protocol !== 'https:' || url.username || url.password) throw new Error('authentication requires a credential-free HTTPS URL');
   const basic = Buffer.from(`x-access-token:${token}`).toString('base64');
-  return { 'http.https://github.com/.extraheader': `AUTHORIZATION: basic ${basic}` };
+  return { [`http.${url.origin}${url.pathname.replace(/\/$/, '')}/.extraheader`]: `AUTHORIZATION: basic ${basic}` };
 }

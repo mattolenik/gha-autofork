@@ -8,9 +8,9 @@ import type { AgentBackend } from './types.js';
 export function createBackend(name: Inputs['worker']['backend'], inputs: Inputs, log: Logger): AgentBackend {
   switch (name) {
     case 'claude':
-      return new ClaudeBackend({ log });
+      return new ClaudeBackend({ log, sandbox: inputs.sandbox ?? false });
     case 'codex':
-      return new CodexBackend({ log });
+      return new CodexBackend({ log, sandbox: inputs.sandbox ?? false });
     case 'fake':
       return new FakeBackend(inputs.fakeScript);
   }

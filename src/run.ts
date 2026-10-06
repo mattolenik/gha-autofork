@@ -4,18 +4,21 @@ import { createBackend, backendEnv } from './agents/index.js';
 import { AgentRunner } from './agents/runner.js';
 import type { AgentBackend } from './agents/types.js';
 import { Budget } from './budget.js';
+import { writeCandidate } from './candidate.js';
 import { runConsensus } from './consensus.js';
 import { buildChildEnv } from './env.js';
 import { AutopatchError, type FailureState } from './errors.js';
 import { runGates } from './gates.js';
 import { Git, repoUrl, authExtraHeader } from './git.js';
 import type { Inputs } from './inputs.js';
-import { closeFailureIssue, upsertFailureIssue, type IssuesApi } from './issue.js';
+import type { IssuesApi } from './issue.js';
 import type { Logger } from './log.js';
-import { computePlan, resolveBranches } from './plan.js';
-import { fastForward, listLeftoverBranches, publishBranch, pushTempBranch, tempBranchName, type PublishContext } from './publish.js';
-import { runRebase } from './rebase.js';
-import { renderSummary, writeResults, type RunReport } from './report.js';
+import { computePlan, type RebasePlan } from './plan.js';
+import { fetchCheckpoint, tempBranchName } from './publish.js';
+import { runRebase, type PatchRecord, type RebaseOutcome } from './rebase.js';
+import { saveRecovery } from './recovery.js';
+import { assertCandidate } from './state.js';
+import { writeResults, type RunReport } from './report.js';
 import { makeWorker } from './worker.js';
 
 export interface RunEnv {
@@ -73,11 +76,12 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
     notes: [],
     error: null,
   };
-  const [owner, repo] = inputs.repository.split('/') as [string, string];
   const budget = new Budget(inputs.maxCostUsd);
   let git: Git | null = null;
   let wt: Git | null = null;
-  let publishCtx: PublishContext | null = null;
+  let workPlan: RebasePlan | null = null;
+  let progress: PatchRecord[] = [];
+  let currentPatch: string | null = null;
 
   const finish = async (state: RunReport['state'], reason: string): Promise<RunReport> => {
     report.state = state;
@@ -85,6 +89,7 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
     report.finishedAt = new Date().toISOString();
     report.costUsd = budget.spentUsd;
     report.agentCalls = budget.calls;
+    report.unpricedCalls = budget.unpricedCalls;
     await writeResults(resultsDir, report, report.consensus?.gates.rangeDiff ?? report.gates?.rangeDiff ?? null);
     return report;
   };
@@ -93,36 +98,17 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
     report.error = { message, details };
     log.warning(`${state}: ${message}`);
     for (const d of details.slice(0, 20)) log.info(`  ${d}`);
-    if (wt && publishCtx && report.tempBranch) {
-      try {
-        const head = await wt.revParse('HEAD');
-        if (head !== report.plan?.branchSha) {
-          await pushTempBranch(publishCtx, head, report.tempBranch);
-          report.headSha = head;
-          report.notes.push(`partial result pushed to ${report.tempBranch} for rescue`);
-        } else {
-          report.tempBranch = null;
-        }
-      } catch (e) {
-        report.notes.push(`could not push the temporary branch: ${e instanceof Error ? e.message : String(e)}`);
-      }
+    if (wt && workPlan && state !== 'FAILED_TAMPERED') {
+      await saveRecovery(wt, workPlan, path.join(resultsDir, 'recovery'), progress, currentPatch)
+        .catch(e => report.notes.push(`could not update recovery checkpoint: ${String(e)}`));
+      report.recoveryDir = path.join(resultsDir, 'recovery');
     }
-    if (git && report.tempBranch) report.leftoverBranches = await listLeftoverBranches(git, report.tempBranch).catch(() => []);
-    const result = await finish(state, message);
-    if (deps.issues && !inputs.dryRun) {
-      try {
-        const url = await upsertFailureIssue(deps.issues, owner, repo, report.plan?.branch ?? inputs.branch ?? 'default branch', renderSummary(report, { forIssue: true, runUrl: env.runUrl }), log);
-        report.notes.push(`issue: ${url}`);
-        await writeResults(resultsDir, report, null);
-      } catch (e) {
-        log.warning(`could not create or update the failure issue: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
-    return result;
+    return finish(state, message);
   };
 
   try {
     // 1. Fork checkout
+    await new Git(base).requireSupportedVersion();
     const forkUrl = inputs.forkRemoteUrl ?? `${env.serverUrl}/${inputs.repository}.git`;
     const ws = new Git(env.workspace);
     const wsOrigin = await ws.remoteUrl('origin');
@@ -132,48 +118,64 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
     } else {
       const cloneDir = path.join(base, 'fork');
       log.info(`cloning ${inputs.repository} into ${cloneDir}`);
-      const cloner = /^https:\/\/github\.com\//.test(forkUrl) ? new Git(base).withConfig(authExtraHeader(inputs.token)) : new Git(base);
+      const cloner = forkUrl.startsWith('https://') ? new Git(base).withConfig(authExtraHeader(inputs.token, forkUrl)) : new Git(base);
       await fs.mkdir(base, { recursive: true });
       await cloner.run(['clone', '--quiet', '--no-tags', forkUrl, cloneDir]);
       git = new Git(cloneDir);
     }
+    git = await git.authenticated(inputs.token);
     if (await git.isShallow()) {
       log.info('unshallowing the checkout');
       await git.run(['fetch', '--unshallow', '--no-tags', 'origin']);
     }
 
     // 2. Branches and upstream
-    await git.ensureRemote('upstream', repoUrl(inputs.upstream));
-    const { branch, upstreamBranch } = await resolveBranches(git, { branch: inputs.branch, upstreamBranch: inputs.upstreamBranch });
+    await git.ensureRemote('upstream', repoUrl(inputs.upstream, env.serverUrl));
+    const upstreamGit = await git.authenticated(inputs.upstreamToken, 'upstream');
+    const branch = inputs.branch ?? await git.remoteDefaultBranch('origin');
+    const upstreamBranch = inputs.upstreamBranch ?? await upstreamGit.remoteDefaultBranch('upstream');
+    if (!branch || !upstreamBranch) throw new AutopatchError('FAILED_PLAN', 'could not discover default branches; check read credentials or specify branch and upstream_branch');
+    for (const name of [branch, upstreamBranch]) await git.run(['check-ref-format', '--branch', name]);
     await git.run(['fetch', '--no-tags', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`]);
     log.info(`fetching upstream ${inputs.upstream} (${upstreamBranch})`);
-    await git.run(['fetch', '--no-tags', '--prune', 'upstream', '+refs/heads/*:refs/remotes/upstream/*']);
+    await upstreamGit.run(['fetch', '--no-tags', '--prune', 'upstream', '+refs/heads/*:refs/remotes/upstream/*']);
 
     // 3. Plan
-    const plan = await computePlan(git, { branch, upstreamBranch, branchRev: `refs/remotes/origin/${branch}`, maxPatches: inputs.maxPatches });
-    report.plan = plan;
-    publishCtx = { git, branch, leaseSha: plan.branchSha, runId: env.runId, token: inputs.token, dryRun: inputs.dryRun, log };
+    const checkpointSha = await fetchCheckpoint(git, branch);
+    const planned = await computePlan(git, { branch, upstreamBranch, branchRev: `refs/remotes/origin/${branch}`, maxPatches: inputs.maxPatches,
+      checkpointSha, initialBase: inputs.initialBase });
+    report.plan = planned;
 
-    if (plan.kind === 'nothing_to_do') {
-      return await finish('NOTHING_TO_DO', `upstream ${upstreamBranch} has not moved since the last rebase; ${plan.patches.length} patch(es) in place`);
+    if (planned.kind === 'nothing_to_do') {
+      report.headSha = planned.branchSha;
+      return await finish('NOTHING_TO_DO', `upstream ${upstreamBranch} has not moved since the last rebase; ${planned.patches.length} patch(es) in place`);
     }
-    if (plan.kind === 'fast_forward') {
-      await fastForward(publishCtx, plan.upstreamSha);
-      report.headSha = plan.upstreamSha;
-      return await finish('FAST_FORWARDED', `fork carries no patches; fast-forwarded ${branch} to upstream ${plan.upstreamSha.slice(0, 12)}${inputs.dryRun ? ' (dry run: not pushed)' : ''}`);
-    }
+    const plan: RebasePlan = planned.kind === 'rebase' ? planned : { ...planned, kind: 'rebase', base: planned.branchSha,
+      patches: [], expectedSurvivors: 0, upstreamCommits: await git.revListCount(`${planned.branchSha}..${planned.upstreamSha}`), workflowPaths: [] };
+    workPlan = plan;
+    const independent = !!inputs.reviewer && (inputs.reviewer.backend !== inputs.worker.backend || inputs.worker.backend === 'fake');
+    const autoEligible = independent && !!inputs.verifyCommand && !!(checkpointSha || inputs.initialBase);
+    if (!autoEligible) report.notes.push('automatic publishing requires independent review, verify_command, and an existing upstream checkpoint or explicit initial_base; candidate will be staged');
 
     log.info(`${plan.patches.length} patch(es) to rebase over ${plan.upstreamCommits} new upstream commit(s); ${plan.patches.filter((p) => p.absorbed).length} already upstream`);
     if (plan.workflowPaths.length) log.info(`workflow files involved (token needs Workflows permission): ${plan.workflowPaths.join(', ')}`);
 
     // 4. Worktree on the temporary branch
     report.tempBranch = tempBranchName(env.runId, env.runAttempt);
-    wt = await git.worktreeAdd(wtDir, plan.branchSha);
+    // Agent-facing Git objects never carry transport credentials in their argv/environment.
+    wt = await new Git(git.cwd).worktreeAdd(wtDir, planned.kind === 'fast_forward' ? plan.upstreamSha : plan.branchSha);
     await wt.run(['switch', '-q', '-C', report.tempBranch]);
 
     // 5. Agents
     const makeBackend = deps.createBackend ?? ((name: Inputs['worker']['backend']) => createBackend(name, inputs, log));
     const workerBackend = makeBackend(inputs.worker.backend);
+    const installedBackends = [workerBackend];
+    const checkCapabilities = (backend: AgentBackend) => {
+      if (inputs.requireHardLimits && (!backend.capabilities?.budgetLimit || !backend.capabilities.turnLimit)) {
+        throw new AutopatchError('FAILED_PLAN', `${backend.name} cannot enforce dollar and turn limits; require_hard_limits is incompatible with this backend`);
+      }
+    };
+    checkCapabilities(workerBackend);
     await workerBackend.ensureInstalled(inputs.installClis);
     const timeoutMs = inputs.agentTimeoutMinutes * 60_000;
     const runnerOpts = { budget, maxTurns: inputs.maxTurns, timeoutMs, transcriptsDir: path.join(resultsDir, 'transcripts'), log };
@@ -181,14 +183,35 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
     let reviewer: AgentRunner | null = null;
     if (inputs.reviewer) {
       const reviewerBackend = inputs.reviewer.backend === inputs.worker.backend ? workerBackend : makeBackend(inputs.reviewer.backend);
-      await reviewerBackend.ensureInstalled(inputs.installClis);
+      checkCapabilities(reviewerBackend);
+      if (reviewerBackend !== workerBackend) await reviewerBackend.ensureInstalled(inputs.installClis);
+      if (!installedBackends.includes(reviewerBackend)) installedBackends.push(reviewerBackend);
       reviewer = new AgentRunner({ ...runnerOpts, backend: reviewerBackend, model: inputs.reviewer.model, role: 'reviewer', env: buildChildEnv(backendEnv(inputs.reviewer.backend, inputs)) });
     } else {
       report.notes.push('no reviewer configured: only the worker self-check gated this rebase');
     }
+    report.backendVersions = {};
+    for (const backend of installedBackends) {
+      report.backendVersions[backend.name] = backend.version ?? 'scripted';
+    }
+    for (const backend of installedBackends) {
+      if (!backend.capabilities?.costReporting) {
+        report.notes.push(`${backend.name} does not report dollars; its wall-clock timeout is enforced and total cost is incomplete`);
+      }
+    }
 
     // 6. Rebase
-    const outcome = await log.group('rebase', () => runRebase({ git: wt!, plan, worker: makeWorker(worker, plan, wtDir), holdDir, log }));
+    const onProgress = async (records: PatchRecord[], active: string | null) => {
+      progress = records;
+      currentPatch = active;
+      report.recoveryDir = path.join(resultsDir, 'recovery');
+      await saveRecovery(wt!, plan, report.recoveryDir, records, active);
+      await fs.writeFile(path.join(resultsDir, 'progress.json'), JSON.stringify({ plan, records, currentPatch: active }, null, 2));
+    };
+    await onProgress([], null);
+    const outcome: RebaseOutcome = planned.kind === 'fast_forward'
+      ? { headSha: plan.upstreamSha, records: [], conflictsResolved: 0, mapping: new Map() }
+      : await log.group('rebase', () => runRebase({ git: wt!, plan, worker: makeWorker(worker, plan, wtDir), holdDir, log, onProgress }));
     report.outcome = outcome;
     report.headSha = outcome.headSha;
 
@@ -202,9 +225,15 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
         verifyTimeoutMs: timeoutMs,
         env: buildChildEnv(),
         log,
+        sandbox: inputs.sandbox ?? false,
       });
     const consensus = await log.group('review', () =>
-      runConsensus({ git: wt!, plan, outcome, worker, reviewer, maxRounds: inputs.maxRounds, runGates: gatesFn, holdDir, log }),
+      runConsensus({ git: wt!, plan, outcome, worker, reviewer, maxRounds: inputs.maxRounds, runGates: gatesFn, holdDir, log,
+        onProgress: async (rounds, gates) => {
+          report.gates = gates;
+          await fs.writeFile(path.join(resultsDir, 'review-progress.json'), JSON.stringify({ rounds, gates }, null, 2));
+          await onProgress(outcome.records, null);
+        } }),
     );
     report.consensus = consensus;
     report.gates = consensus.gates;
@@ -215,22 +244,14 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
       return await fail(consensus.state === 'CONTESTED' ? 'FAILED_CONTESTED' : 'FAILED_GATE', consensus.reason, consensus.gates.failures);
     }
 
-    // 8. Publish
-    await pushTempBranch(publishCtx, consensus.headSha, report.tempBranch);
-    report.leftoverBranches = await listLeftoverBranches(git, report.tempBranch).catch(() => []);
-    if (inputs.publish === 'stage') {
-      return await finish('STAGED', `${consensus.reason}; result left on ${report.tempBranch} (publish=stage)`);
-    }
-    report.publish = await publishBranch(publishCtx, consensus.headSha, report.tempBranch, inputs.keepBackups);
-    if (deps.issues && !inputs.dryRun) {
-      await closeFailureIssue(deps.issues, owner, repo, branch, `Resolved: run ${env.runUrl ?? env.runId} rebased \`${branch}\` onto upstream ${plan.upstreamSha.slice(0, 12)}.`, log).catch((e: unknown) =>
-        log.warning(`could not close the failure issue: ${e instanceof Error ? e.message : String(e)}`),
-      );
-    }
-    return await finish(
-      'APPROVED',
-      `${consensus.reason}; ${inputs.dryRun ? 'dry run: nothing pushed' : `${branch} force-pushed to ${consensus.headSha.slice(0, 12)} (old tip backed up as ${report.publish.backupRef})`}`,
-    );
+    // 8. Export an immutable candidate. This process never publishes refs or issues.
+    await assertCandidate(wt, consensus.gates.candidate);
+    report.artifactDir = path.join(resultsDir, 'candidate');
+    report.artifactDigest = await writeCandidate(wt, report.artifactDir, plan, outcome, {
+      runId: env.runId, runAttempt: env.runAttempt, repository: inputs.repository, upstream: inputs.upstream,
+      checkpointSha: checkpointSha ?? null, kind: planned.kind, autoEligible, verifyCommand: inputs.verifyCommand ?? null,
+    });
+    return await finish('PREPARED', `${consensus.reason}; immutable candidate exported for isolated verification`);
   } catch (err) {
     if (err instanceof AutopatchError) return await fail(err.state, err.message, err.details);
     const message = err instanceof Error ? (err.stack ?? err.message) : String(err);

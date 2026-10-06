@@ -52,6 +52,7 @@ export interface FakeScript {
 
 export class FakeBackend implements AgentBackend {
   readonly name = 'fake';
+  readonly capabilities = { turnLimit: true, budgetLimit: true, costReporting: true };
   private script: FakeScript | undefined;
   private readonly counters: Record<string, number> = {};
   readonly calls: { schemaName: string; meta: Record<string, string>; prompt: string }[] = [];

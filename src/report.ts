@@ -21,12 +21,18 @@ export interface RunReport {
   gates: GateResult | null;
   publish: PublishResult | null;
   tempBranch: string | null;
+  tempBranchRemote?: boolean;
   headSha: string | null;
   leftoverBranches: string[];
   costUsd: number;
   agentCalls: number;
   notes: string[];
   error: { message: string; details: string[] } | null;
+  unpricedCalls?: number;
+  recoveryDir?: string;
+  artifactDir?: string;
+  artifactDigest?: string;
+  backendVersions?: Record<string, string>;
 }
 
 export async function writeResults(dir: string, report: RunReport, rangeDiff: string | null): Promise<string> {
@@ -52,7 +58,7 @@ function fence(text: string, lang = ''): string {
 /** Markdown used for the job summary and, with rescue commands, the failure issue. */
 export function renderSummary(r: RunReport, opts: { forIssue: boolean; runUrl?: string | undefined } = { forIssue: false }): string {
   const lines: string[] = [];
-  const ok = r.state === 'APPROVED' || r.state === 'NOTHING_TO_DO' || r.state === 'FAST_FORWARDED' || r.state === 'STAGED';
+  const ok = !r.state.startsWith('FAILED_');
   lines.push(`## autopatch: ${ok ? '✅' : '❌'} ${r.state}`);
   lines.push('');
   lines.push(r.reason);
@@ -70,9 +76,10 @@ export function renderSummary(r: RunReport, opts: { forIssue: boolean; runUrl?: 
       if (plan.workflowPaths.length) lines.push(`| workflow files touched | ${plan.workflowPaths.map((p) => `\`${p}\``).join(', ')} |`);
     }
     if (r.headSha) lines.push(`| result | ${short(r.headSha)} |`);
-    if (r.tempBranch) lines.push(`| temporary branch | \`${r.tempBranch}\`${r.publish?.pushed ? ' (deleted)' : ''} |`);
+    if (r.tempBranch) lines.push(`| temporary branch | \`${r.tempBranch}\`${r.publish?.pushed ? ' (deleted)' : r.tempBranchRemote ? '' : ' (local only)'} |`);
     if (r.publish?.backupRef) lines.push(`| backup of old tip | \`${r.publish.backupRef}\` |`);
     lines.push(`| agent calls / cost | ${r.agentCalls} / $${r.costUsd.toFixed(2)} |`);
+    if (r.unpricedCalls) lines.push(`| unpriced calls | ${r.unpricedCalls} (cost above is incomplete) |`);
     lines.push('');
   }
 
@@ -125,19 +132,25 @@ export function renderSummary(r: RunReport, opts: { forIssue: boolean; runUrl?: 
     lines.push('### Leftover branches from earlier runs', '', ...r.leftoverBranches.map((b) => `- \`${b}\``), '', 'These are never deleted automatically. Delete them once you no longer need them.', '');
   }
 
-  if (opts.forIssue && r.plan && r.tempBranch) {
+  if (r.recoveryDir && !r.tempBranchRemote) {
+    lines.push(r.outcome ? '### Recover a completed candidate' : '### Resume an incomplete rebase', '', 'Download the results artifact and restore its recovery checkpoint with the trusted recovery tool:', '',
+      fence('npx tsx scripts/recover.ts /path/to/results/recovery /path/to/new-rescue-directory', 'sh'), '',
+      'The checkpoint includes the original history, completed resolutions, index, and pending rebase commands. Inspect git status and continue the rebase. A partial branch must not be promoted to the default branch.');
+  }
+  if (opts.forIssue && r.plan && r.tempBranch && r.outcome && r.tempBranchRemote) {
     const branch = r.plan.branch;
+    const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
     lines.push('### How to finish by hand', '');
     lines.push('The rebased result (as far as it got) is on the temporary branch. To inspect and finish it locally:', '');
     lines.push(
       fence(
         [
-          `git fetch origin ${r.tempBranch} ${branch}`,
-          `git checkout -b autopatch-rescue origin/${r.tempBranch}`,
+          `git fetch origin ${quote(r.tempBranch)} ${quote(branch)}`,
+          `git checkout -b autopatch-rescue ${quote(`origin/${r.tempBranch}`)}`,
           `git range-diff ${r.plan.kind === 'rebase' ? `${short(r.plan.base)}..origin/${branch} ${short(r.plan.upstreamSha)}..HEAD` : ''}`,
           '# fix things, then:',
-          `git push --force-with-lease=${branch}:${r.plan.branchSha} origin HEAD:${branch}`,
-          `git push origin --delete ${r.tempBranch}`,
+          `git push ${quote(`--force-with-lease=${branch}:${r.plan.branchSha}`)} origin ${quote(`HEAD:${branch}`)}`,
+          `git push origin --delete ${quote(r.tempBranch)}`,
         ].join('\n'),
         'sh',
       ),

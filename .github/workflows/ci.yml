@@ -18,6 +18,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: sudo apt-get update && sudo apt-get install -y bubblewrap
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
@@ -29,32 +30,64 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - run: sudo apt-get update && sudo apt-get install -y bubblewrap
       - run: git --version
       - name: build fixtures
+        id: fixture
         run: |
           scripts/e2e-fixture.sh "$RUNNER_TEMP/e2e-ok"
           scripts/e2e-fixture.sh "$RUNNER_TEMP/e2e-bad"
+          echo "base=$(git --git-dir "$RUNNER_TEMP/e2e-ok/origin.git" rev-parse main~2)" >> "$GITHUB_OUTPUT"
 
       - name: successful rebase
         id: ok
         uses: ./
         with:
+          phase: prepare
           upstream: ${{ runner.temp }}/e2e-ok/upstream.git
           fork_remote_url: ${{ runner.temp }}/e2e-ok/origin.git
           repository: ${{ github.repository }}
           token: dummy
+          initial_base: ${{ steps.fixture.outputs.base }}
           worker: fake
           reviewer: fake
           fake_script: ${{ github.workspace }}/test/e2e/success.json
           verify_command: grep -q 'HELLO, ' src/lib.js && test -f CLAUDE.md
           install_clis: 'false'
 
+      - name: verify immutable candidate
+        id: verify
+        uses: ./
+        with:
+          phase: verify
+          upstream: ${{ runner.temp }}/e2e-ok/upstream.git
+          fork_remote_url: ${{ runner.temp }}/e2e-ok/origin.git
+          token: dummy
+          artifact_dir: ${{ steps.ok.outputs.artifact_dir }}
+          candidate_digest: ${{ steps.ok.outputs.artifact_digest }}
+          verify_command: grep -q 'HELLO, ' src/lib.js && test -f CLAUDE.md
+
+      - name: publish verified candidate
+        id: publish
+        uses: ./
+        with:
+          phase: publish
+          upstream: ${{ runner.temp }}/e2e-ok/upstream.git
+          fork_remote_url: ${{ runner.temp }}/e2e-ok/origin.git
+          token: dummy
+          publish: auto
+          artifact_dir: ${{ steps.ok.outputs.artifact_dir }}
+          candidate_digest: ${{ steps.ok.outputs.artifact_digest }}
+          verification_dir: ${{ steps.verify.outputs.artifact_dir }}
+          verification_digest: ${{ steps.verify.outputs.artifact_digest }}
+          verify_command: grep -q 'HELLO, ' src/lib.js && test -f CLAUDE.md
+
       - name: assert success
         env:
           ORIGIN: ${{ runner.temp }}/e2e-ok/origin.git
-          STATE: ${{ steps.ok.outputs.state }}
-          SHA: ${{ steps.ok.outputs.branch_sha }}
-          BACKUP: ${{ steps.ok.outputs.backup_ref }}
+          STATE: ${{ steps.publish.outputs.state }}
+          SHA: ${{ steps.publish.outputs.branch_sha }}
+          BACKUP: ${{ steps.publish.outputs.backup_ref }}
         run: |
           set -eux
           test "$STATE" = APPROVED
@@ -84,12 +117,11 @@ jobs:
           ORIGIN: ${{ runner.temp }}/e2e-bad/origin.git
           OUTCOME: ${{ steps.bad.outcome }}
           STATE: ${{ steps.bad.outputs.state }}
-          TEMP: ${{ steps.bad.outputs.temp_branch }}
-          SHA: ${{ steps.bad.outputs.branch_sha }}
+          RESULTS: ${{ steps.bad.outputs.results_dir }}
         run: |
           set -eux
           test "$OUTCOME" = failure
           test "$STATE" = FAILED_CONTESTED
-          test -n "$TEMP"
-          test "$(git --git-dir "$ORIGIN" rev-parse "refs/heads/$TEMP")" = "$SHA"
+          test -z "$(git --git-dir "$ORIGIN" for-each-ref 'refs/heads/autopatch/*')"
+          test -f "$RESULTS/recovery/history.bundle"
           git --git-dir "$ORIGIN" show main:src/lib.js | grep -q "HELLO '" # main untouched

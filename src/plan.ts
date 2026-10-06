@@ -59,6 +59,10 @@ export interface PlanOptions {
   /** Remote name for upstream, default "upstream". */
   upstreamRemote?: string;
   maxPatches: number;
+  /** Last accepted upstream tip, fetched from the fork's checkpoint ref. */
+  checkpointSha?: string | undefined;
+  /** Explicit old upstream base for initialization when no checkpoint exists. */
+  initialBase?: string | undefined;
 }
 
 export interface ResolveBranchesOptions {
@@ -123,6 +127,14 @@ export async function computePlan(git: Git, opts: PlanOptions): Promise<Plan> {
     );
   }
 
+  if (opts.checkpointSha && !(await git.isAncestor(opts.checkpointSha, upstreamSha))) {
+    throw new AutopatchError('FAILED_PLAN', 'upstream history was rewritten since the last accepted checkpoint; inspect the rewrite and explicitly reinitialize the upstream checkpoint');
+  }
+  const anchor = opts.checkpointSha ?? opts.initialBase;
+  if (anchor && (!(await git.isAncestor(anchor, branchSha)) || !(await git.isAncestor(anchor, upstreamSha)))) {
+    throw new AutopatchError('FAILED_PLAN', 'the upstream checkpoint/initial_base must be an ancestor of both the fork and upstream');
+  }
+
   const bases = await git.mergeBases(upstreamSha, branchSha);
   if (bases.length === 0) {
     throw new AutopatchError(
@@ -138,6 +150,9 @@ export async function computePlan(git: Git, opts: PlanOptions): Promise<Plan> {
     );
   }
   const base = bases[0] as string;
+  if (opts.initialBase && !opts.checkpointSha && base !== await git.revParse(opts.initialBase)) {
+    throw new AutopatchError('FAILED_PLAN', 'initial_base must equal the current merge base; inspect and linearize the fork before initialization');
+  }
 
   const merges = await git.lines(['rev-list', '--merges', '--format=%h %s', '--no-commit-header', `${base}..${branchSha}`]);
   if (merges.length > 0) {
@@ -176,8 +191,8 @@ export async function computePlan(git: Git, opts: PlanOptions): Promise<Plan> {
 
   const workflowPaths = Array.from(
     new Set([
-      ...(await git.lines(['diff', '--name-only', base, branchSha, '--', '.github/workflows'])),
-      ...(await git.lines(['diff', '--name-only', base, upstreamSha, '--', '.github/workflows'])),
+      ...(await git.paths(['diff', '--name-only', '-z', base, branchSha, '--', '.github/workflows'])),
+      ...(await git.paths(['diff', '--name-only', '-z', base, upstreamSha, '--', '.github/workflows'])),
     ]),
   ).sort();
 

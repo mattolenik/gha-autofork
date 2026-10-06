@@ -29,13 +29,14 @@ export async function spawnCollect(bin: string, args: string[], o: SpawnOptions)
       const child = spawn(bin, args, { cwd: o.cwd, env: o.env, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
       const out: Buffer[] = [];
       const err: Buffer[] = [];
+      let writes = Promise.resolve();
       child.stdout.on('data', (b: Buffer) => {
         out.push(b);
-        void sink?.write(b);
+        if (sink) writes = writes.then(async () => { await sink.write(b); });
       });
       child.stderr.on('data', (b: Buffer) => {
         err.push(b);
-        void sink?.write(b);
+        if (sink) writes = writes.then(async () => { await sink.write(b); });
       });
       let timedOut = false;
       const timer = setTimeout(() => {
@@ -50,14 +51,16 @@ export async function spawnCollect(bin: string, args: string[], o: SpawnOptions)
         clearTimeout(timer);
         reject(e);
       });
-      child.on('close', (code) => {
+      child.on('close', async (code) => {
         clearTimeout(timer);
+        try { await writes; } catch (e) { reject(e); return; }
         if (timedOut) {
           reject(new AgentTimeoutError(o.backendName, o.timeoutMs));
           return;
         }
         resolve({ code: code ?? 1, stdout: Buffer.concat(out).toString('utf8'), stderr: Buffer.concat(err).toString('utf8') });
       });
+      child.stdin.on('error', () => undefined);
       if (o.stdin !== undefined) child.stdin.end(o.stdin);
       else child.stdin.end();
     });
@@ -67,7 +70,7 @@ export async function spawnCollect(bin: string, args: string[], o: SpawnOptions)
 }
 
 export async function which(bin: string, env: Record<string, string>): Promise<string | undefined> {
-  const r = await spawnCollect('sh', ['-c', `command -v ${bin}`], { cwd: process.cwd(), env, timeoutMs: 10_000, backendName: 'which' }).catch(() => null);
+  const r = await spawnCollect('sh', ['-c', 'command -v "$1"', 'sh', bin], { cwd: process.cwd(), env, timeoutMs: 10_000, backendName: 'which' }).catch(() => null);
   if (!r || r.code !== 0) return undefined;
   return r.stdout.trim() || undefined;
 }

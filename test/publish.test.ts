@@ -3,7 +3,6 @@ import { silentLogger } from '../src/log.js';
 import {
   backupRefName,
   classifyPushError,
-  fastForward,
   listBackups,
   listLeftoverBranches,
   publishBranch,
@@ -63,8 +62,9 @@ describe('publish', () => {
     await fx.upstreamWork.run(['push', '-q', fx.originBare, `other:${fx.branch}`]);
 
     await expect(publishBranch(ctx(), head, 'autopatch/123-1', 10)).rejects.toMatchObject({ state: 'FAILED_PUBLISH', message: expect.stringMatching(/branch moved/) });
-    // backup was still created, branch untouched
+    // The atomic transaction creates no backup when the branch lease fails.
     expect(await originSha(`refs/heads/${fx.branch}`)).not.toBe(head);
+    expect(await listBackups(fx.fork, fx.branch)).toEqual([]);
   });
 
   it('prunes old backups beyond keep_backups', async () => {
@@ -86,14 +86,6 @@ describe('publish', () => {
     expect(r.pushed).toBe(false);
     expect(await originSha(`refs/heads/${fx.branch}`)).toBe(fx.patchShas[2]);
     expect(await originSha('refs/heads/autopatch/123-1')).toBeUndefined();
-  });
-
-  it('fast-forwards a patchless fork', async () => {
-    fx = await createFixture({ patches: [] });
-    const up = await advanceUpstream(fx, { 'x.txt': 'x\n' }, 'upstream: x');
-    await fetchUpstream(fx);
-    await fastForward(ctx({ leaseSha: fx.base }), up);
-    expect(await originSha(`refs/heads/${fx.branch}`)).toBe(up);
   });
 
   it('lists leftover temp branches from other runs', async () => {

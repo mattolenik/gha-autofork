@@ -68,6 +68,7 @@ export class AgentRunner {
   }
 
   private async invoke(call: StructuredCall, user: string, jsonSchema: Record<string, unknown>, attempt: number): Promise<AgentRunResult> {
+    this.o.budget.assertAvailable();
     this.seq += 1;
     const id = `${String(this.seq).padStart(3, '0')}-${this.o.role}-${call.schemaName}${attempt > 1 ? `-retry${attempt}` : ''}`;
     this.o.log.info(`${this.o.role} (${this.label}): ${call.schemaName}${attempt > 1 ? ` (attempt ${attempt})` : ''}`);
@@ -91,6 +92,7 @@ export class AgentRunner {
         meta: call.meta ?? {},
       });
     } catch (err) {
+      this.o.budget.record(null); // a killed/crashed CLI may have incurred unreported spend
       if (err instanceof AgentTimeoutError) {
         throw new AutopatchError('FAILED_TIMEOUT', `${this.o.role} (${this.label}) ${err.message}`);
       }
@@ -105,7 +107,7 @@ export class AgentRunner {
       await fs.writeFile(transcriptPath, `${header}\n${result.raw}\n`);
     }
     this.o.budget.record(result.costUsd);
-    if (result.exitCode !== 0 && result.structured === undefined) {
+    if (result.exitCode !== 0) {
       throw new AutopatchError('FAILED_AGENT', `${this.o.role} (${this.label}) exited with code ${result.exitCode}: ${tail(result.raw, 2000)}`);
     }
     return result;
