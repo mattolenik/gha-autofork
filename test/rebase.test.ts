@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AutopatchError } from '../src/errors.js';
+import { AutoforkError } from '../src/errors.js';
 import { runGates } from '../src/gates.js';
 import { buildChildEnv } from '../src/env.js';
 import { silentLogger } from '../src/log.js';
@@ -13,14 +13,14 @@ afterEach(async () => {
   await fx?.cleanup();
 });
 
-async function failure(p: Promise<unknown>): Promise<AutopatchError> {
+async function failure(p: Promise<unknown>): Promise<AutoforkError> {
   try {
     await p;
   } catch (e) {
-    if (e instanceof AutopatchError) return e;
+    if (e instanceof AutoforkError) return e;
     throw e;
   }
-  throw new Error('expected an AutopatchError');
+  throw new Error('expected an AutoforkError');
 }
 
 const UPSTREAM_GREET = ['export function greet(name) {', "  return 'hello, ' + name + '!';", '}', '', 'export const VERSION = 2;', ''].join('\n');

@@ -60,7 +60,7 @@ function fence(text: string, lang = ''): string {
 export function renderSummary(r: RunReport, opts: { forIssue: boolean; runUrl?: string | undefined } = { forIssue: false }): string {
   const lines: string[] = [];
   const ok = !r.state.startsWith('FAILED_');
-  lines.push(`## autopatch: ${ok ? '✅' : '❌'} ${r.state}`);
+  lines.push(`## autofork: ${ok ? '✅' : '❌'} ${r.state}`);
   lines.push('');
   lines.push(r.reason);
   if (opts.runUrl) lines.push('', `Run: ${opts.runUrl}`);
@@ -147,7 +147,7 @@ export function renderSummary(r: RunReport, opts: { forIssue: boolean; runUrl?: 
       fence(
         [
           `git fetch origin ${quote(r.tempBranch)} ${quote(branch)} ${quote(r.plan.branchSha)}`,
-          `git checkout -b autopatch-rescue ${quote(`origin/${r.tempBranch}`)}`,
+          `git checkout -b autofork-rescue ${quote(`origin/${r.tempBranch}`)}`,
           `git range-diff ${r.plan.kind === 'rebase' ? `${quote(`${r.plan.base}..${r.plan.branchSha}`)} ${quote(`${r.plan.upstreamSha}..HEAD`)}` : ''}`,
           '# fix things, then:',
           `git push ${quote(`--force-with-lease=${branch}:${r.plan.branchSha}`)} origin ${quote(`HEAD:${branch}`)}`,

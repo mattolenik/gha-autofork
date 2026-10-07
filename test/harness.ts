@@ -25,7 +25,7 @@ export async function prepare(fx: Fixture, script: FakeScript, opts: { maxCostUs
   if (plan.kind !== 'rebase') throw new Error(`expected a rebase plan, got ${plan.kind}`);
   const wtDir = path.join(fx.root, 'wt');
   const wt = await fx.fork.worktreeAdd(wtDir, plan.branchSha);
-  await wt.run(['switch', '-q', '-c', 'autopatch/test']);
+  await wt.run(['switch', '-q', '-c', 'autofork/test']);
   const backend = new FakeBackend(undefined, script);
   const budget = new Budget(opts.maxCostUsd ?? 100);
   const runner = new AgentRunner({

@@ -1,20 +1,20 @@
-# gha-autopatch
+# gha-autofork
 
 Keep a personal fork as **upstream + your patch series**. Git replays the patches, an agent resolves
 conflicts, and an independent agent reviews the result. Verification and publishing run in separate jobs.
 
 The supported automatic-publishing entrypoint is the
-[reusable workflow](.github/workflows/autopatch.yml). The JavaScript action exposes the individual phases.
+[reusable workflow](.github/workflows/autofork.yml). The JavaScript action exposes the individual phases.
 
 ## Setup
 
 1. Enable Actions on your fork and allow the publishing actor to force-push the maintained branch.
-2. Create `AUTOPATCH_TOKEN`: a PAT or App installation token scoped to the fork with Contents,
+2. Create `AUTOFORK_TOKEN`: a PAT or App installation token scoped to the fork with Contents,
    Workflows, and Issues write. This credential is passed only to publishing and failure reporting.
 3. Add `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` for the providers you select.
 4. Commit [examples/fork-workflow.yml](examples/fork-workflow.yml) as a fork patch. Set upstream, models,
    and a meaningful `verify_command`. Callers can pin the reusable workflow itself to a reviewed SHA.
-   Its inner action currently uses `mattolenik/gha-autopatch@v1`, selected by this repository; pinning the
+   Its inner action currently uses `mattolenik/gha-autofork@v1`, selected by this repository; pinning the
    workflow does not pin that mutable action ref. For a fully pinned chain, copy the phase workflow and
    pin each action, or use a release whose workflow already pins its inner dependencies.
 5. Fetch upstream locally and inspect `git merge-base upstream/main main`. Supply that SHA as
@@ -29,7 +29,7 @@ permissions:
   actions: read
 jobs:
   sync:
-    uses: mattolenik/gha-autopatch/.github/workflows/autopatch.yml@v1
+    uses: mattolenik/gha-autofork/.github/workflows/autofork.yml@v1
     with:
       upstream: OWNER/REPO
       worker: claude:claude-opus-5-5
@@ -38,7 +38,7 @@ jobs:
       publish: auto
       # First publication only: initial_base: <inspected merge-base SHA>
     secrets:
-      token: ${{ secrets.AUTOPATCH_TOKEN }}
+      token: ${{ secrets.AUTOFORK_TOKEN }}
       anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
       openai_api_key: ${{ secrets.OPENAI_API_KEY }}
 ```
@@ -86,7 +86,7 @@ that pass gates but remain contested are exported for the publishing job to stag
 they can never auto-promote, even if `publish: auto` is requested.
 
 Publication atomically creates an immutable old-tip backup, updates the maintained branch using its
-explicit planning-time lease, and advances `refs/autopatch/upstream/<branch>`. Servers must support
+explicit planning-time lease, and advances `refs/autofork/upstream/<branch>`. Servers must support
 atomic pushes. Cleanup failures after that transaction are warnings, not failed publications.
 
 The upstream checkpoint detects non-fast-forward upstream rewrites. Inspect such a rewrite manually;
@@ -200,7 +200,7 @@ Claude may retry an invalid API key with long backoff, so the wall-clock limit r
 
 ## Recovery
 
-Completed but contested candidates are retained on `autopatch/<run>-<attempt>` by the credentialed
+Completed but contested candidates are retained on `autofork/<run>-<attempt>` by the credentialed
 publishing job and linked from the failure issue. They remain available independently of artifact
 retention. Incomplete rebases use the prepare-results artifact: `recovery/` contains incremental history,
 dirty/conflicted file snapshots (including binary/symlink/deletion data), changed index entries, rebase
@@ -217,7 +217,7 @@ git rebase --continue
 ```
 
 The third argument can instead be an existing local clone containing the original fork tip. For a private
-HTTPS fork, set `AUTOPATCH_RECOVERY_TOKEN` to a read credential. The tool refuses to overwrite an existing
+HTTPS fork, set `AUTOFORK_RECOVERY_TOKEN` to a read credential. The tool refuses to overwrite an existing
 directory and does not run the rebase or repository scripts.
 Inspect the whole patch series and rerun verification before manually promoting a recovered result.
 Checkpoints are updated at conflict stops, after resolutions or review fixes, and on failures. Unchanged
@@ -248,8 +248,8 @@ bubblewrap boundary, provider DNS, and the bundled phase actions. macOS skips th
 
 The manually dispatched [integration workflow](.github/workflows/integration.yml) checks pinned CLI
 versions, optionally makes small billed model calls, and optionally exercises authenticated GitHub
-operations against an initialized disposable `owner/autopatch-smoke-*` repository. Supply
-`AUTOPATCH_SMOKE_TOKEN` scoped only to that repository. It creates and removes run-specific test refs.
+operations against an initialized disposable `owner/autofork-smoke-*` repository. Supply
+`AUTOFORK_SMOKE_TOKEN` scoped only to that repository. It creates and removes run-specific test refs.
 
 Scope remains linear patch series on a maintained branch: no release/tag synchronization or submodule
 verification. See [docs/DESIGN.md](docs/DESIGN.md) for state transitions and trust boundaries.

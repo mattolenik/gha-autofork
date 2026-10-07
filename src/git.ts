@@ -46,8 +46,8 @@ export const BASE_GIT_ENV: Record<string, string> = {
 };
 
 export const BOT_IDENTITY = {
-  name: 'autopatch[bot]',
-  email: 'autopatch@users.noreply.github.com',
+  name: 'autofork[bot]',
+  email: 'autofork@users.noreply.github.com',
 };
 
 export interface GitOptions {

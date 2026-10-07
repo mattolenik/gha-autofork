@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { AutopatchError } from './errors.js';
+import { AutoforkError } from './errors.js';
 import type { Git } from './git.js';
 import type { Logger } from './log.js';
 import type { Patch, RebasePlan } from './plan.js';
@@ -178,13 +178,13 @@ export async function runRebase(o: RebaseOptions): Promise<RebaseOutcome> {
   while (r.code !== 0) {
     const inRebase = await exists(await git.gitPath('rebase-merge'));
     if (!inRebase) {
-      throw new AutopatchError('FAILED_REBASE', `git rebase failed outside of a conflict: ${r.stderr.trim() || r.stdout.trim()}`);
+      throw new AutoforkError('FAILED_REBASE', `git rebase failed outside of a conflict: ${r.stderr.trim() || r.stdout.trim()}`);
     }
     const rebaseHead = await git.tryRevParse('REBASE_HEAD');
     await o.onProgress?.([...records.values()], rebaseHead ?? null);
     const patch = plan.patches.find((p) => p.sha === rebaseHead);
     if (!patch) {
-      throw new AutopatchError('FAILED_REBASE', `rebase stopped on unknown commit ${rebaseHead ?? '(none)'}`);
+      throw new AutoforkError('FAILED_REBASE', `rebase stopped on unknown commit ${rebaseHead ?? '(none)'}`);
     }
     const index = plan.patches.indexOf(patch) + 1;
     const unmerged = await git.unmergedPaths();
@@ -197,7 +197,7 @@ export async function runRebase(o: RebaseOptions): Promise<RebaseOutcome> {
         r = await git.run(['rebase', '--skip'], { allowFailure: true });
         continue;
       }
-      throw new AutopatchError('FAILED_REBASE', `rebase stopped on "${patch.subject}" with staged changes but no conflicts: ${r.stderr.trim()}`);
+      throw new AutoforkError('FAILED_REBASE', `rebase stopped on "${patch.subject}" with staged changes but no conflicts: ${r.stderr.trim()}`);
     }
 
     // Every unmerged index entry needs an explicit resolution, including binary/rename conflicts.
@@ -248,18 +248,18 @@ export async function runRebase(o: RebaseOptions): Promise<RebaseOutcome> {
         try { return await o.worker.resolve(ctx); } finally { await q.restore(); }
       });
       if (report.status === 'need_help') {
-        throw new AutopatchError('FAILED_REBASE', `worker could not resolve "${patch.subject}": ${report.summary}`, report.risks);
+        throw new AutoforkError('FAILED_REBASE', `worker could not resolve "${patch.subject}": ${report.summary}`, report.risks);
       }
       const applied = await applyReport(git, report, conflictPaths);
       extraPaths = applied.extraPaths;
       if (applied.problems.length === 0) break;
       log.warning(`resolution of "${patch.subject}" attempt ${attempt} has problems: ${applied.problems.join('; ')}`);
       if (attempt === maxAttempts) {
-        throw new AutopatchError('FAILED_REBASE', `worker could not produce a clean resolution for "${patch.subject}" after ${maxAttempts} attempts`, applied.problems);
+        throw new AutoforkError('FAILED_REBASE', `worker could not produce a clean resolution for "${patch.subject}" after ${maxAttempts} attempts`, applied.problems);
       }
       ctx.previousProblems = applied.problems;
     }
-    if (!report) throw new AutopatchError('FAILED_REBASE', 'unreachable: no report');
+    if (!report) throw new AutoforkError('FAILED_REBASE', 'unreachable: no report');
 
     if (report.status === 'skip_patch') {
       log.info(`patch ${index}/${total} "${patch.subject}" skipped by worker: ${report.summary}`);
@@ -282,7 +282,7 @@ export async function runRebase(o: RebaseOptions): Promise<RebaseOutcome> {
   const newShas = await git.lines(['rev-list', '--reverse', `${plan.upstreamSha}..${headSha}`]);
   if (newShas.length !== survivors.length) {
     const summary = plan.patches.map((p) => `${p.sha.slice(0, 12)} ${records.get(p.sha)?.result ?? 'applied'} ${p.subject}`);
-    throw new AutopatchError(
+    throw new AutoforkError(
       'FAILED_GATE',
       `patch accounting mismatch: expected ${survivors.length} commits on top of upstream but found ${newShas.length}`,
       summary,

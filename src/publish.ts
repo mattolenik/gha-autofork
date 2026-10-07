@@ -1,4 +1,4 @@
-import { AutopatchError } from './errors.js';
+import { AutoforkError } from './errors.js';
 import type { Git } from './git.js';
 import type { Logger } from './log.js';
 
@@ -17,9 +17,9 @@ export interface PublishContext {
   log: Logger;
 }
 
-export const TEMP_BRANCH_PREFIX = 'autopatch/';
-export const BACKUP_PREFIX = 'refs/autopatch/backup/';
-export const checkpointRef = (branch: string): string => `refs/autopatch/upstream/${branch}`;
+export const TEMP_BRANCH_PREFIX = 'autofork/';
+export const BACKUP_PREFIX = 'refs/autofork/backup/';
+export const checkpointRef = (branch: string): string => `refs/autofork/upstream/${branch}`;
 
 export async function fetchCheckpoint(git: Git, branch: string): Promise<string | undefined> {
   const ref = checkpointRef(branch);
@@ -142,27 +142,27 @@ async function runPush(git: Git, args: string[]): Promise<void> {
 }
 
 /** Map git push failures to actionable messages. */
-export function classifyPushError(args: string[], err: string, out = ''): AutopatchError {
+export function classifyPushError(args: string[], err: string, out = ''): AutoforkError {
   if (/without `?workflow`? scope|workflows? permission|refusing to allow .* workflow/i.test(err)) {
-    return new AutopatchError(
+    return new AutoforkError(
       'FAILED_PUBLISH',
       'GitHub refused the push because it changes files under .github/workflows. The token needs the "Workflows" permission (fine-grained PAT: Workflows read/write; GitHub App: permission-workflows: write). The default GITHUB_TOKEN can never push workflow files.',
       [err.trim()],
     );
   }
   if (/stale info|force-with-lease/i.test(err)) {
-    return new AutopatchError(
+    return new AutoforkError(
       'FAILED_PUBLISH',
       'the branch moved on GitHub while this run was working, so the force-push was refused to avoid clobbering those commits. The rebased result is on the temporary branch; rerun the workflow.',
       [err.trim()],
     );
   }
   if (/protected branch|rule violations|GH006|GH013/i.test(err)) {
-    return new AutopatchError(
+    return new AutoforkError(
       'FAILED_PUBLISH',
       'a branch protection rule or ruleset blocked the force-push. Allow force pushes for the token owner (add it as a bypass actor) or disable the rule.',
       [err.trim()],
     );
   }
-  return new AutopatchError('FAILED_PUBLISH', `git ${args.join(' ')} failed: ${err.trim() || out.trim()}`);
+  return new AutoforkError('FAILED_PUBLISH', `git ${args.join(' ')} failed: ${err.trim() || out.trim()}`);
 }

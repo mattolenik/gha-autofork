@@ -9,7 +9,7 @@ export interface Logger {
 
 export const coreLogger: Logger = {
   // Agent/commit text is data, including strings resembling Actions workflow commands.
-  info: (m) => m.split(/\r?\n/).forEach(line => core.info(`[autopatch] ${line}`)),
+  info: (m) => m.split(/\r?\n/).forEach(line => core.info(`[autofork] ${line}`)),
   warning: (m) => core.warning(m),
   debug: (m) => core.debug(m),
   group: (name, fn) => core.group(name, fn),

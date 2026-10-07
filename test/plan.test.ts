@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { AutopatchError } from '../src/errors.js';
+import { AutoforkError } from '../src/errors.js';
 import { computePlan, resolveBranches } from '../src/plan.js';
 import {
   absorbPatchUpstream,
@@ -16,14 +16,14 @@ afterEach(async () => {
   await fx?.cleanup();
 });
 
-async function fail(p: Promise<unknown>): Promise<AutopatchError> {
+async function fail(p: Promise<unknown>): Promise<AutoforkError> {
   try {
     await p;
   } catch (e) {
-    if (e instanceof AutopatchError) return e;
+    if (e instanceof AutoforkError) return e;
     throw e;
   }
-  throw new Error('expected an AutopatchError');
+  throw new Error('expected an AutoforkError');
 }
 
 describe('resolveBranches', () => {
@@ -82,14 +82,14 @@ describe('computePlan', () => {
 
   it('flags workflow files touched by patches or upstream', async () => {
     fx = await createFixture({
-      patches: [{ message: 'fork: add autopatch workflow', files: { '.github/workflows/autopatch.yml': 'on: schedule\n' } }],
+      patches: [{ message: 'fork: add autofork workflow', files: { '.github/workflows/autofork.yml': 'on: schedule\n' } }],
     });
     await advanceUpstream(fx, { '.github/workflows/ci.yml': 'on: push\n' }, 'upstream: ci');
     await fetchUpstream(fx);
     const plan = await computePlan(fx.fork, opts);
     expect(plan.kind).toBe('rebase');
     if (plan.kind !== 'rebase') return;
-    expect(plan.workflowPaths).toEqual(['.github/workflows/autopatch.yml', '.github/workflows/ci.yml']);
+    expect(plan.workflowPaths).toEqual(['.github/workflows/autofork.yml', '.github/workflows/ci.yml']);
   });
 
   it('fast-forwards when the fork carries no patches', async () => {

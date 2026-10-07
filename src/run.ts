@@ -7,7 +7,7 @@ import { Budget } from './budget.js';
 import { writeCandidate } from './candidate.js';
 import { runConsensus } from './consensus.js';
 import { buildChildEnv } from './env.js';
-import { AutopatchError, type FailureState } from './errors.js';
+import { AutoforkError, type FailureState } from './errors.js';
 import { runGates } from './gates.js';
 import { Git, repoUrl, authExtraHeader } from './git.js';
 import type { Inputs } from './inputs.js';
@@ -48,7 +48,7 @@ export function normalizeRepoUrl(u: string): string {
 export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<RunReport> {
   const { log } = deps;
   const startedAt = new Date().toISOString();
-  const base = path.join(env.runnerTemp, 'autopatch');
+  const base = path.join(env.runnerTemp, 'autofork');
   const resultsDir = path.join(base, 'results');
   const holdDir = path.join(base, 'hold');
   const wtDir = path.join(base, 'wt');
@@ -134,7 +134,7 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
     const upstreamGit = await git.authenticated(inputs.upstreamToken, 'upstream');
     const branch = inputs.branch ?? await git.remoteDefaultBranch('origin');
     const upstreamBranch = inputs.upstreamBranch ?? await upstreamGit.remoteDefaultBranch('upstream');
-    if (!branch || !upstreamBranch) throw new AutopatchError('FAILED_PLAN', 'could not discover default branches; check read credentials or specify branch and upstream_branch');
+    if (!branch || !upstreamBranch) throw new AutoforkError('FAILED_PLAN', 'could not discover default branches; check read credentials or specify branch and upstream_branch');
     for (const name of [branch, upstreamBranch]) await git.run(['check-ref-format', '--branch', name]);
     await git.run(['fetch', '--no-tags', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`]);
     log.info(`fetching upstream ${inputs.upstream} (${upstreamBranch})`);
@@ -206,7 +206,7 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
     const installedBackends = [workerBackend];
     const checkCapabilities = (backend: AgentBackend) => {
       if (inputs.requireHardLimits && (!backend.capabilities?.budgetLimit || !backend.capabilities.turnLimit)) {
-        throw new AutopatchError('FAILED_PLAN', `${backend.name} cannot enforce dollar and turn limits; require_hard_limits is incompatible with this backend`);
+        throw new AutoforkError('FAILED_PLAN', `${backend.name} cannot enforce dollar and turn limits; require_hard_limits is incompatible with this backend`);
       }
     };
     checkCapabilities(workerBackend);
@@ -292,7 +292,7 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
     await exportCandidate(outcome, 'approved');
     return await finish('PREPARED', `${consensus.reason}; immutable candidate exported for isolated verification`);
   } catch (err) {
-    if (err instanceof AutopatchError) return await fail(err.state, err.message, err.details);
+    if (err instanceof AutoforkError) return await fail(err.state, err.message, err.details);
     const message = err instanceof Error ? (err.stack ?? err.message) : String(err);
     return await fail(report.outcome ? 'FAILED_GATE' : report.plan ? 'FAILED_REBASE' : 'FAILED_PLAN', `unexpected error: ${message}`);
   } finally {

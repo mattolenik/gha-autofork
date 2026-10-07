@@ -110,10 +110,10 @@ describe('renderSummary', () => {
     },
     gates: null,
     publish: null,
-    tempBranch: 'autopatch/99-1',
+    tempBranch: 'autofork/99-1',
     tempBranchRemote: true,
     headSha: 'e'.repeat(40),
-    leftoverBranches: ['autopatch/42-1'],
+    leftoverBranches: ['autofork/42-1'],
     costUsd: 1.5,
     agentCalls: 4,
     notes: ['a note'],
@@ -128,9 +128,9 @@ describe('renderSummary', () => {
     expect(md).toContain('applied, 1 conflict(s) resolved');
     expect(md).toContain('[I1] blocker: wrong');
     expect(md).toContain('How to finish by hand');
-    expect(md).toContain("git checkout -b autopatch-rescue 'origin/autopatch/99-1'");
+    expect(md).toContain("git checkout -b autofork-rescue 'origin/autofork/99-1'");
     expect(md).toContain(`--force-with-lease=main:${'a'.repeat(40)}`);
-    expect(md).toContain('autopatch/42-1');
+    expect(md).toContain('autofork/42-1');
     expect(md).toContain('https://example/run');
   });
 

@@ -1,4 +1,4 @@
-import { AutopatchError } from './errors.js';
+import { AutoforkError } from './errors.js';
 import type { Git } from './git.js';
 
 export interface Patch {
@@ -81,11 +81,11 @@ export async function resolveBranches(
   const upstream = opts.upstreamRemote ?? 'upstream';
   const branch = opts.branch ?? (await git.remoteDefaultBranch(origin));
   if (!branch) {
-    throw new AutopatchError('FAILED_PLAN', `could not determine the default branch of remote "${origin}"; set the branch input`);
+    throw new AutoforkError('FAILED_PLAN', `could not determine the default branch of remote "${origin}"; set the branch input`);
   }
   const upstreamBranch = opts.upstreamBranch ?? (await git.remoteDefaultBranch(upstream));
   if (!upstreamBranch) {
-    throw new AutopatchError(
+    throw new AutoforkError(
       'FAILED_PLAN',
       `could not determine the default branch of remote "${upstream}"; set the upstream_branch input`,
     );
@@ -117,33 +117,33 @@ export async function computePlan(git: Git, opts: PlanOptions): Promise<Plan> {
   const upstreamRef = `refs/remotes/${upstreamRemote}/${opts.upstreamBranch}`;
   const branchSha = await git.tryRevParse(opts.branchRev ?? opts.branch);
   if (!branchSha) {
-    throw new AutopatchError('FAILED_PLAN', `branch "${opts.branchRev ?? opts.branch}" does not exist in the fork checkout`);
+    throw new AutoforkError('FAILED_PLAN', `branch "${opts.branchRev ?? opts.branch}" does not exist in the fork checkout`);
   }
   const upstreamSha = await git.tryRevParse(upstreamRef);
   if (!upstreamSha) {
-    throw new AutopatchError(
+    throw new AutoforkError(
       'FAILED_PLAN',
       `upstream branch "${opts.upstreamBranch}" was not fetched (expected ${upstreamRef}); check the upstream and upstream_branch inputs`,
     );
   }
 
   if (opts.checkpointSha && !(await git.isAncestor(opts.checkpointSha, upstreamSha))) {
-    throw new AutopatchError('FAILED_PLAN', 'upstream history was rewritten since the last accepted checkpoint; inspect the rewrite and explicitly reinitialize the upstream checkpoint');
+    throw new AutoforkError('FAILED_PLAN', 'upstream history was rewritten since the last accepted checkpoint; inspect the rewrite and explicitly reinitialize the upstream checkpoint');
   }
   const anchor = opts.checkpointSha ?? opts.initialBase;
   if (anchor && (!(await git.isAncestor(anchor, branchSha)) || !(await git.isAncestor(anchor, upstreamSha)))) {
-    throw new AutopatchError('FAILED_PLAN', 'the upstream checkpoint/initial_base must be an ancestor of both the fork and upstream');
+    throw new AutoforkError('FAILED_PLAN', 'the upstream checkpoint/initial_base must be an ancestor of both the fork and upstream');
   }
 
   const bases = await git.mergeBases(upstreamSha, branchSha);
   if (bases.length === 0) {
-    throw new AutopatchError(
+    throw new AutoforkError(
       'FAILED_PLAN',
       `"${opts.branch}" and ${upstreamRemote}/${opts.upstreamBranch} have unrelated histories; is this really a fork of ${upstreamRemote}?`,
     );
   }
   if (bases.length > 1) {
-    throw new AutopatchError(
+    throw new AutoforkError(
       'FAILED_PLAN',
       `"${opts.branch}" and ${upstreamRemote}/${opts.upstreamBranch} have ${bases.length} merge bases (criss-cross history); linearize the fork branch by hand once, then rerun`,
       bases,
@@ -151,21 +151,21 @@ export async function computePlan(git: Git, opts: PlanOptions): Promise<Plan> {
   }
   const base = bases[0] as string;
   if (opts.initialBase && !opts.checkpointSha && base !== await git.revParse(opts.initialBase)) {
-    throw new AutopatchError('FAILED_PLAN', 'initial_base must equal the current merge base; inspect and linearize the fork before initialization');
+    throw new AutoforkError('FAILED_PLAN', 'initial_base must equal the current merge base; inspect and linearize the fork before initialization');
   }
 
   const merges = await git.lines(['rev-list', '--merges', '--format=%h %s', '--no-commit-header', `${base}..${branchSha}`]);
   if (merges.length > 0) {
-    throw new AutopatchError(
+    throw new AutoforkError(
       'FAILED_PLAN',
-      `"${opts.branch}" contains ${merges.length} merge commit(s) on top of upstream; autopatch needs a linear patch series. Rebase once by hand: git rebase --onto ${upstreamRemote}/${opts.upstreamBranch} ${base.slice(0, 12)} ${opts.branch}`,
+      `"${opts.branch}" contains ${merges.length} merge commit(s) on top of upstream; autofork needs a linear patch series. Rebase once by hand: git rebase --onto ${upstreamRemote}/${opts.upstreamBranch} ${base.slice(0, 12)} ${opts.branch}`,
       merges,
     );
   }
 
   const rawPatches = await listPatches(git, base, branchSha);
   if (rawPatches.length > opts.maxPatches) {
-    throw new AutopatchError(
+    throw new AutoforkError(
       'FAILED_PLAN',
       `"${opts.branch}" carries ${rawPatches.length} commits over upstream, above max_patches=${opts.maxPatches}; is upstream_branch correct?`,
     );

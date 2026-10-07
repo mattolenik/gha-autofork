@@ -87,7 +87,7 @@ export class CodexBackend implements AgentBackend {
   }
 
   async run(prompt: string, opts: AgentRunOptions): Promise<AgentRunResult> {
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'autopatch-codex-'));
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'autofork-codex-'));
     try {
       const schemaFile = path.join(tmp, 'schema.json');
       const lastMessageFile = path.join(tmp, 'last-message.txt');

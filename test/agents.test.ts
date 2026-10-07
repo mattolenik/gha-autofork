@@ -35,7 +35,7 @@ function opts(partial: Partial<AgentRunOptions> = {}): AgentRunOptions {
 
 let tmp: string;
 beforeEach(async () => {
-  tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'autopatch-agents-'));
+  tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'autofork-agents-'));
   process.env.INPUT_TOKEN = 'leak';
   process.env.GITHUB_TOKEN = 'leak';
   process.env.ACTIONS_RUNTIME_TOKEN = 'leak';

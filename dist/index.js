@@ -44345,7 +44345,7 @@ ${lines.join("\n")}`);
 // src/log.ts
 var coreLogger = {
   // Agent/commit text is data, including strings resembling Actions workflow commands.
-  info: (m) => m.split(/\r?\n/).forEach((line) => info(`[autopatch] ${line}`)),
+  info: (m) => m.split(/\r?\n/).forEach((line) => info(`[autofork] ${line}`)),
   warning: (m) => warning(m),
   debug: (m) => debug(m),
   group: (name, fn) => group(name, fn)
@@ -44376,7 +44376,7 @@ ${ticks}`;
 function renderSummary(r, opts = { forIssue: false }) {
   const lines = [];
   const ok = !r.state.startsWith("FAILED_");
-  lines.push(`## autopatch: ${ok ? "\u2705" : "\u274C"} ${r.state}`);
+  lines.push(`## autofork: ${ok ? "\u2705" : "\u274C"} ${r.state}`);
   lines.push("");
   lines.push(r.reason);
   if (opts.runUrl) lines.push("", `Run: ${opts.runUrl}`);
@@ -44461,7 +44461,7 @@ function renderSummary(r, opts = { forIssue: false }) {
       fence(
         [
           `git fetch origin ${quote(r.tempBranch)} ${quote(branch)} ${quote(r.plan.branchSha)}`,
-          `git checkout -b autopatch-rescue ${quote(`origin/${r.tempBranch}`)}`,
+          `git checkout -b autofork-rescue ${quote(`origin/${r.tempBranch}`)}`,
           `git range-diff ${r.plan.kind === "rebase" ? `${quote(`${r.plan.base}..${r.plan.branchSha}`)} ${quote(`${r.plan.upstreamSha}..HEAD`)}` : ""}`,
           "# fix things, then:",
           `git push ${quote(`--force-with-lease=${branch}:${r.plan.branchSha}`)} origin ${quote(`HEAD:${branch}`)}`,
@@ -44513,12 +44513,12 @@ var fs4 = __toESM(require("node:fs/promises"), 1);
 var path2 = __toESM(require("node:path"), 1);
 
 // src/errors.ts
-var AutopatchError = class extends Error {
+var AutoforkError = class extends Error {
   state;
   details;
   constructor(state, message, details = []) {
     super(message);
-    this.name = "AutopatchError";
+    this.name = "AutoforkError";
     this.state = state;
     this.details = details;
   }
@@ -44643,7 +44643,7 @@ var AgentRunner = class {
 Your previous answer did not match the required JSON schema: ${lastError}
 Answer again with a single JSON object that matches the schema exactly.`;
     }
-    throw new AutopatchError("FAILED_AGENT", `${this.o.role} (${this.label}) failed to produce valid ${call.schemaName} output twice: ${lastError}`);
+    throw new AutoforkError("FAILED_AGENT", `${this.o.role} (${this.label}) failed to produce valid ${call.schemaName} output twice: ${lastError}`);
   }
   async invoke(call, user, jsonSchema, attempt) {
     this.o.budget.assertAvailable();
@@ -44672,9 +44672,9 @@ Answer again with a single JSON object that matches the schema exactly.`;
     } catch (err) {
       this.o.budget.record(null);
       if (err instanceof AgentTimeoutError) {
-        throw new AutopatchError("FAILED_TIMEOUT", `${this.o.role} (${this.label}) ${err.message}`);
+        throw new AutoforkError("FAILED_TIMEOUT", `${this.o.role} (${this.label}) ${err.message}`);
       }
-      throw new AutopatchError("FAILED_AGENT", `${this.o.role} (${this.label}) crashed: ${err instanceof Error ? err.message : String(err)}`);
+      throw new AutoforkError("FAILED_AGENT", `${this.o.role} (${this.label}) crashed: ${err instanceof Error ? err.message : String(err)}`);
     }
     const seconds = ((Date.now() - started) / 1e3).toFixed(1);
     this.o.log.info(
@@ -44688,7 +44688,7 @@ ${result.raw}
     }
     this.o.budget.record(result.costUsd);
     if (result.exitCode !== 0) {
-      throw new AutopatchError("FAILED_AGENT", `${this.o.role} (${this.label}) exited with code ${result.exitCode}: ${tail(result.raw, 2e3)}`);
+      throw new AutoforkError("FAILED_AGENT", `${this.o.role} (${this.label}) exited with code ${result.exitCode}: ${tail(result.raw, 2e3)}`);
     }
     return result;
   }
@@ -44809,8 +44809,8 @@ var BASE_GIT_ENV = {
   LC_ALL: "C"
 };
 var BOT_IDENTITY = {
-  name: "autopatch[bot]",
-  email: "autopatch@users.noreply.github.com"
+  name: "autofork[bot]",
+  email: "autofork@users.noreply.github.com"
 };
 function defaultGitTimeout(args) {
   return ["clone", "fetch", "push", "bundle", "repack", "gc"].includes(args[0] ?? "") ? 0 : 5 * 6e4;
@@ -45039,7 +45039,7 @@ async function sandboxCommand(bin, args, cwd, mode, env, writable = []) {
   const git = new Git(cwd);
   const common = await git.commonDir();
   const gitFile = path4.join(cwd, ".git");
-  const home = "/tmp/autopatch-home";
+  const home = "/tmp/autofork-home";
   const sandboxArgs = [
     "--die-with-parent",
     "--new-session",
@@ -45179,7 +45179,7 @@ var ClaudeBackend = class {
     return args;
   }
   async run(prompt, opts) {
-    const configDir = await fs8.mkdtemp(path5.join(os5.tmpdir(), "autopatch-claude-"));
+    const configDir = await fs8.mkdtemp(path5.join(os5.tmpdir(), "autofork-claude-"));
     try {
       const env = {
         ...opts.env,
@@ -45304,7 +45304,7 @@ var CodexBackend = class {
     return args;
   }
   async run(prompt, opts) {
-    const tmp = await fs9.mkdtemp(path6.join(os6.tmpdir(), "autopatch-codex-"));
+    const tmp = await fs9.mkdtemp(path6.join(os6.tmpdir(), "autofork-codex-"));
     try {
       const schemaFile = path6.join(tmp, "schema.json");
       const lastMessageFile = path6.join(tmp, "last-message.txt");
@@ -45567,7 +45567,7 @@ var Budget = class {
   /** Calls whose backend reported no cost; time limits are the backstop for those. */
   unpricedCalls = 0;
   assertAvailable() {
-    if (this.spentUsd >= this.maxUsd) throw new AutopatchError("FAILED_BUDGET", `reported budget exhausted ($${this.spentUsd.toFixed(2)} of $${this.maxUsd.toFixed(2)})`);
+    if (this.spentUsd >= this.maxUsd) throw new AutoforkError("FAILED_BUDGET", `reported budget exhausted ($${this.spentUsd.toFixed(2)} of $${this.maxUsd.toFixed(2)})`);
   }
   record(costUsd) {
     this.calls += 1;
@@ -45575,10 +45575,10 @@ var Budget = class {
       this.unpricedCalls += 1;
       return;
     }
-    if (!Number.isFinite(costUsd) || costUsd < 0) throw new AutopatchError("FAILED_AGENT", "backend returned an invalid cost");
+    if (!Number.isFinite(costUsd) || costUsd < 0) throw new AutoforkError("FAILED_AGENT", "backend returned an invalid cost");
     this.spentUsd += costUsd;
     if (this.spentUsd > this.maxUsd) {
-      throw new AutopatchError(
+      throw new AutoforkError(
         "FAILED_BUDGET",
         `agent spend $${this.spentUsd.toFixed(2)} exceeded max_cost_usd=$${this.maxUsd.toFixed(2)} after ${this.calls} calls`
       );
@@ -45642,25 +45642,25 @@ async function guardGit(git, mode, label, call) {
     return await call();
   } finally {
     try {
-      if (await gitState(git) !== before) throw new AutopatchError("FAILED_TAMPERED", `${label} changed Git metadata or the index`);
+      if (await gitState(git) !== before) throw new AutoforkError("FAILED_TAMPERED", `${label} changed Git metadata or the index`);
       if (mode === "readonly" && await worktreeState(git) !== beforeFiles) {
-        throw new AutopatchError("FAILED_TAMPERED", `${label} changed the worktree during a read-only operation`);
+        throw new AutoforkError("FAILED_TAMPERED", `${label} changed the worktree during a read-only operation`);
       }
     } catch (e) {
-      if (e instanceof AutopatchError) throw e;
-      throw new AutopatchError("FAILED_TAMPERED", `${label} left Git state unreadable`, [e instanceof Error ? e.message : String(e)]);
+      if (e instanceof AutoforkError) throw e;
+      throw new AutoforkError("FAILED_TAMPERED", `${label} left Git state unreadable`, [e instanceof Error ? e.message : String(e)]);
     }
   }
 }
 async function assertCandidate(git, expected) {
   const current = await candidateIdentity(git);
   if (current.headSha !== expected.headSha || current.treeSha !== expected.treeSha || (await git.statusPorcelain()).length) {
-    throw new AutopatchError("FAILED_TAMPERED", "candidate changed after verification or approval");
+    throw new AutoforkError("FAILED_TAMPERED", "candidate changed after verification or approval");
   }
 }
 async function validateFilePath(root, rel) {
   if (!rel || path8.isAbsolute(rel) || rel.includes("\0") || rel.split("/").some((p) => !p || p === "." || p === ".." || p.toLowerCase() === ".git")) {
-    throw new AutopatchError("FAILED_AGENT", `invalid file path: ${JSON.stringify(rel)}`);
+    throw new AutoforkError("FAILED_AGENT", `invalid file path: ${JSON.stringify(rel)}`);
   }
   const parts = rel.split("/");
   for (let i = 1; i <= parts.length; i++) {
@@ -45669,7 +45669,7 @@ async function validateFilePath(root, rel) {
       throw e;
     });
     if (st && (i < parts.length ? !st.isDirectory() : st.isDirectory())) {
-      throw new AutopatchError("FAILED_AGENT", `file path traverses a symlink or names a directory: ${JSON.stringify(rel)}`);
+      throw new AutoforkError("FAILED_AGENT", `file path traverses a symlink or names a directory: ${JSON.stringify(rel)}`);
     }
   }
 }
@@ -45686,7 +45686,7 @@ async function fileDigest(file2) {
 }
 async function updateRefs(git, refs) {
   for (const [ref, sha2] of Object.entries(refs)) {
-    if (!/^refs\/autopatch\/[\w/-]+$/.test(ref) || !/^[0-9a-f]{40}$/.test(sha2)) throw new Error("invalid artifact ref");
+    if (!/^refs\/autofork\/[\w/-]+$/.test(ref) || !/^[0-9a-f]{40}$/.test(sha2)) throw new Error("invalid artifact ref");
   }
   await git.run(["update-ref", "--stdin"], { input: Object.entries(refs).map(([ref, sha2]) => `update ${ref} ${sha2}
 `).join("") });
@@ -45705,23 +45705,23 @@ async function fetchBasis(git, source, basis, token) {
   if (!/^[0-9a-f]{40}$/.test(basis)) throw new Error("invalid bundle basis");
   await git.ensureRemote("origin", source);
   const remote = await git.authenticated(token);
-  const result = await remote.run(["fetch", "--no-tags", "--filter=blob:none", "origin", `${basis}:refs/autopatch/basis`], { allowFailure: true });
-  if (result.code !== 0) throw new AutopatchError("FAILED_PLAN", "could not fetch the original fork tip required by the incremental artifact; use a repository or backup that still contains it", [result.stderr.trim()]);
+  const result = await remote.run(["fetch", "--no-tags", "--filter=blob:none", "origin", `${basis}:refs/autofork/basis`], { allowFailure: true });
+  if (result.code !== 0) throw new AutoforkError("FAILED_PLAN", "could not fetch the original fork tip required by the incremental artifact; use a repository or backup that still contains it", [result.stderr.trim()]);
   return remote;
 }
 async function importIncrementalBundle(git, file2, digest2, basis, refs) {
   if (digest2 === null) {
-    for (const sha2 of Object.values(refs)) if (!await git.isAncestor(sha2, basis)) throw new AutopatchError("FAILED_TAMPERED", "missing incremental history");
+    for (const sha2 of Object.values(refs)) if (!await git.isAncestor(sha2, basis)) throw new AutoforkError("FAILED_TAMPERED", "missing incremental history");
   } else {
-    if (await fileDigest(file2) !== digest2) throw new AutopatchError("FAILED_TAMPERED", "bundle digest mismatch");
+    if (await fileDigest(file2) !== digest2) throw new AutoforkError("FAILED_TAMPERED", "bundle digest mismatch");
     const lines = await git.lines(["bundle", "list-heads", file2]);
     const seen = /* @__PURE__ */ new Set();
     for (const line of lines) {
       const [sha2, ref] = line.split(" ");
-      if (!ref || refs[ref] !== sha2 || seen.has(ref)) throw new AutopatchError("FAILED_TAMPERED", "unexpected refs in incremental bundle");
+      if (!ref || refs[ref] !== sha2 || seen.has(ref)) throw new AutoforkError("FAILED_TAMPERED", "unexpected refs in incremental bundle");
       seen.add(ref);
     }
-    if (!seen.size) throw new AutopatchError("FAILED_TAMPERED", "incremental bundle has no refs");
+    if (!seen.size) throw new AutoforkError("FAILED_TAMPERED", "incremental bundle has no refs");
     await git.run(["bundle", "verify", file2]);
     await git.run(["fetch", "--no-tags", file2, ...[...seen].map((ref) => `${ref}:${ref}`)]);
   }
@@ -45763,16 +45763,16 @@ var verificationSchema = external_exports.object({
   passed: external_exports.literal(true)
 }).strict();
 async function readBoundJson(file2, expected) {
-  if (!/^[0-9a-f]{64}$/.test(expected)) throw new AutopatchError("FAILED_GATE", "the producing job must supply the artifact SHA-256 digest");
+  if (!/^[0-9a-f]{64}$/.test(expected)) throw new AutoforkError("FAILED_GATE", "the producing job must supply the artifact SHA-256 digest");
   if ((await fs13.lstat(file2)).size > 5 * 1024 * 1024) throw new Error("artifact manifest is too large");
-  if (await fileDigest(file2) !== expected) throw new AutopatchError("FAILED_TAMPERED", "artifact digest differs from the producing job output");
+  if (await fileDigest(file2) !== expected) throw new AutoforkError("FAILED_TAMPERED", "artifact digest differs from the producing job output");
   return JSON.parse(await fs13.readFile(file2, "utf8"));
 }
 async function writeCandidate(git, directory, plan, outcome, metadata) {
   const identity = await candidateIdentity(git);
   await assertCandidate(git, { headSha: outcome.headSha, treeSha: identity.treeSha });
   await fs13.mkdir(directory, { recursive: true });
-  const refs = { "refs/autopatch/candidate/upstream": plan.upstreamSha, "refs/autopatch/candidate/head": identity.headSha };
+  const refs = { "refs/autofork/candidate/upstream": plan.upstreamSha, "refs/autofork/candidate/head": identity.headSha };
   const bundle = path9.join(directory, "candidate.bundle");
   const bundleDigest = await writeIncrementalBundle(git, bundle, plan.branchSha, refs);
   const candidate = candidateSchema.parse({
@@ -45801,22 +45801,22 @@ async function importCandidate(directory, expectedDigest, destination, options) 
   await git.run(["init", "-q", ...options.bare ? ["--bare"] : []]);
   for (const branch of [candidate.branch, candidate.upstreamBranch]) await git.run(["check-ref-format", "--branch", branch]);
   git = await fetchBasis(git, options.source, candidate.originalSha, options.token);
-  const refs = { "refs/autopatch/candidate/upstream": candidate.upstreamSha, "refs/autopatch/candidate/head": candidate.headSha };
+  const refs = { "refs/autofork/candidate/upstream": candidate.upstreamSha, "refs/autofork/candidate/head": candidate.headSha };
   await importIncrementalBundle(git, bundle, candidate.bundleDigest, candidate.originalSha, refs);
   if (await git.tree(candidate.headSha) !== candidate.treeSha || !await git.isAncestor(candidate.upstreamSha, candidate.headSha)) {
-    throw new AutopatchError("FAILED_GATE", "candidate tree or upstream ancestry is invalid");
+    throw new AutoforkError("FAILED_GATE", "candidate tree or upstream ancestry is invalid");
   }
   const bases = await git.mergeBases(candidate.originalSha, candidate.upstreamSha);
-  if (bases.length !== 1 || bases[0] !== candidate.baseSha) throw new AutopatchError("FAILED_GATE", "candidate has an invalid original merge base");
-  if (candidate.checkpointSha && !await git.isAncestor(candidate.checkpointSha, candidate.upstreamSha)) throw new AutopatchError("FAILED_PLAN", "upstream rewrote its checkpoint");
+  if (bases.length !== 1 || bases[0] !== candidate.baseSha) throw new AutoforkError("FAILED_GATE", "candidate has an invalid original merge base");
+  if (candidate.checkpointSha && !await git.isAncestor(candidate.checkpointSha, candidate.upstreamSha)) throw new AutoforkError("FAILED_PLAN", "upstream rewrote its checkpoint");
   const originals = await git.lines(["rev-list", "--reverse", `${candidate.baseSha}..${candidate.originalSha}`]);
   const survivors = candidate.patches.filter((p) => p.result === "applied");
   const actual = await git.lines(["rev-list", "--reverse", `${candidate.upstreamSha}..${candidate.headSha}`]);
   if (JSON.stringify(originals) !== JSON.stringify(candidate.patches.map((p) => p.original)) || JSON.stringify(actual) !== JSON.stringify(survivors.map((p) => p.current)) || candidate.patches.some((p) => p.current !== null !== survivors.includes(p))) {
-    throw new AutopatchError("FAILED_GATE", "candidate patch accounting or ordering is invalid");
+    throw new AutoforkError("FAILED_GATE", "candidate patch accounting or ordering is invalid");
   }
   for (const range of [`${candidate.baseSha}..${candidate.originalSha}`, `${candidate.upstreamSha}..${candidate.headSha}`]) {
-    if ((await git.lines(["rev-list", "--merges", range])).length) throw new AutopatchError("FAILED_GATE", "candidate patch series contains merges");
+    if ((await git.lines(["rev-list", "--merges", range])).length) throw new AutoforkError("FAILED_GATE", "candidate patch series contains merges");
   }
   if (!options.bare) await git.run(["checkout", "-q", "--detach", candidate.headSha]);
   const descriptions = await git.lines(["log", "--reverse", "--format=%H%x1f%an%x1f%s", `${candidate.baseSha}..${candidate.originalSha}`]);
@@ -45828,7 +45828,7 @@ async function importCandidate(directory, expectedDigest, destination, options) 
     kind: "rebase",
     branch: candidate.branch,
     upstreamBranch: candidate.upstreamBranch,
-    upstreamRef: "refs/autopatch/candidate/upstream",
+    upstreamRef: "refs/autofork/candidate/upstream",
     branchSha: candidate.originalSha,
     upstreamSha: candidate.upstreamSha,
     base: candidate.baseSha,
@@ -46291,7 +46291,7 @@ ${JSON.stringify(response)}` : ""),
         targetPatch: targets.size === 1 ? [...targets][0] : null,
         log
       }).catch((e) => {
-        throw new AutopatchError("FAILED_GATE", `could not fold the worker's review fixes into the patch series: ${e instanceof Error ? e.message : String(e)}`);
+        throw new AutoforkError("FAILED_GATE", `could not fold the worker's review fixes into the patch series: ${e instanceof Error ? e.message : String(e)}`);
       });
       entry.foldWarnings = fold.warnings;
       outcome.mapping = fold.mapping;
@@ -46354,7 +46354,7 @@ async function quarantine(worktree, holdDir, keep = []) {
     const src = path10.join(worktree, rel);
     if (!await exists2(src)) return;
     if ([...keepSet].some((p) => p.startsWith(`${rel}/`))) {
-      if (!(await fs14.lstat(src)).isDirectory()) throw new AutopatchError("FAILED_TAMPERED", "instruction directory was replaced by a symlink or file");
+      if (!(await fs14.lstat(src)).isDirectory()) throw new AutoforkError("FAILED_TAMPERED", "instruction directory was replaced by a symlink or file");
       for (const name of await fs14.readdir(src)) await move(`${rel}/${name}`);
       return;
     }
@@ -46379,7 +46379,7 @@ async function quarantine(worktree, holdDir, keep = []) {
     async restore() {
       if (restored) return;
       restored = true;
-      if (await fs14.realpath(worktree) !== root) throw new AutopatchError("FAILED_TAMPERED", "worktree root changed during quarantine");
+      if (await fs14.realpath(worktree) !== root) throw new AutoforkError("FAILED_TAMPERED", "worktree root changed during quarantine");
       const recreated = [];
       for (const rel of moved) {
         const src = path10.join(holdDir, rel);
@@ -46389,7 +46389,7 @@ async function quarantine(worktree, holdDir, keep = []) {
           try {
             await validateFilePath(worktree, `${path10.dirname(rel)}/__restore_probe__`);
           } catch {
-            throw new AutopatchError("FAILED_TAMPERED", "agent replaced a quarantined file ancestor", [rel]);
+            throw new AutoforkError("FAILED_TAMPERED", "agent replaced a quarantined file ancestor", [rel]);
           }
         }
         if (await exists2(dst)) recreated.push(rel);
@@ -46397,7 +46397,7 @@ async function quarantine(worktree, holdDir, keep = []) {
         await fs14.mkdir(path10.dirname(dst), { recursive: true });
         await fs14.rename(src, dst);
       }
-      if (recreated.length) throw new AutopatchError("FAILED_TAMPERED", "agent recreated quarantined instruction files", recreated);
+      if (recreated.length) throw new AutoforkError("FAILED_TAMPERED", "agent recreated quarantined instruction files", recreated);
     }
   };
 }
@@ -46488,13 +46488,13 @@ async function runRebase(o) {
   while (r.code !== 0) {
     const inRebase = await exists3(await git.gitPath("rebase-merge"));
     if (!inRebase) {
-      throw new AutopatchError("FAILED_REBASE", `git rebase failed outside of a conflict: ${r.stderr.trim() || r.stdout.trim()}`);
+      throw new AutoforkError("FAILED_REBASE", `git rebase failed outside of a conflict: ${r.stderr.trim() || r.stdout.trim()}`);
     }
     const rebaseHead = await git.tryRevParse("REBASE_HEAD");
     await o.onProgress?.([...records.values()], rebaseHead ?? null);
     const patch = plan.patches.find((p) => p.sha === rebaseHead);
     if (!patch) {
-      throw new AutopatchError("FAILED_REBASE", `rebase stopped on unknown commit ${rebaseHead ?? "(none)"}`);
+      throw new AutoforkError("FAILED_REBASE", `rebase stopped on unknown commit ${rebaseHead ?? "(none)"}`);
     }
     const index = plan.patches.indexOf(patch) + 1;
     const unmerged = await git.unmergedPaths();
@@ -46506,7 +46506,7 @@ async function runRebase(o) {
         r = await git.run(["rebase", "--skip"], { allowFailure: true });
         continue;
       }
-      throw new AutopatchError("FAILED_REBASE", `rebase stopped on "${patch.subject}" with staged changes but no conflicts: ${r.stderr.trim()}`);
+      throw new AutoforkError("FAILED_REBASE", `rebase stopped on "${patch.subject}" with staged changes but no conflicts: ${r.stderr.trim()}`);
     }
     const conflictPaths = [];
     for (const [p, stages] of unmerged) {
@@ -46557,18 +46557,18 @@ async function runRebase(o) {
         }
       });
       if (report.status === "need_help") {
-        throw new AutopatchError("FAILED_REBASE", `worker could not resolve "${patch.subject}": ${report.summary}`, report.risks);
+        throw new AutoforkError("FAILED_REBASE", `worker could not resolve "${patch.subject}": ${report.summary}`, report.risks);
       }
       const applied = await applyReport(git, report, conflictPaths);
       extraPaths = applied.extraPaths;
       if (applied.problems.length === 0) break;
       log.warning(`resolution of "${patch.subject}" attempt ${attempt} has problems: ${applied.problems.join("; ")}`);
       if (attempt === maxAttempts) {
-        throw new AutopatchError("FAILED_REBASE", `worker could not produce a clean resolution for "${patch.subject}" after ${maxAttempts} attempts`, applied.problems);
+        throw new AutoforkError("FAILED_REBASE", `worker could not produce a clean resolution for "${patch.subject}" after ${maxAttempts} attempts`, applied.problems);
       }
       ctx.previousProblems = applied.problems;
     }
-    if (!report) throw new AutopatchError("FAILED_REBASE", "unreachable: no report");
+    if (!report) throw new AutoforkError("FAILED_REBASE", "unreachable: no report");
     if (report.status === "skip_patch") {
       log.info(`patch ${index}/${total} "${patch.subject}" skipped by worker: ${report.summary}`);
       record2(patch, { result: "skipped", conflicts: conflictPaths, report, extraPaths });
@@ -46589,7 +46589,7 @@ async function runRebase(o) {
   const newShas = await git.lines(["rev-list", "--reverse", `${plan.upstreamSha}..${headSha}`]);
   if (newShas.length !== survivors.length) {
     const summary2 = plan.patches.map((p) => `${p.sha.slice(0, 12)} ${records.get(p.sha)?.result ?? "applied"} ${p.subject}`);
-    throw new AutopatchError(
+    throw new AutoforkError(
       "FAILED_GATE",
       `patch accounting mismatch: expected ${survivors.length} commits on top of upstream but found ${newShas.length}`,
       summary2
@@ -46790,31 +46790,31 @@ async function computePlan(git, opts) {
   const upstreamRef = `refs/remotes/${upstreamRemote}/${opts.upstreamBranch}`;
   const branchSha = await git.tryRevParse(opts.branchRev ?? opts.branch);
   if (!branchSha) {
-    throw new AutopatchError("FAILED_PLAN", `branch "${opts.branchRev ?? opts.branch}" does not exist in the fork checkout`);
+    throw new AutoforkError("FAILED_PLAN", `branch "${opts.branchRev ?? opts.branch}" does not exist in the fork checkout`);
   }
   const upstreamSha = await git.tryRevParse(upstreamRef);
   if (!upstreamSha) {
-    throw new AutopatchError(
+    throw new AutoforkError(
       "FAILED_PLAN",
       `upstream branch "${opts.upstreamBranch}" was not fetched (expected ${upstreamRef}); check the upstream and upstream_branch inputs`
     );
   }
   if (opts.checkpointSha && !await git.isAncestor(opts.checkpointSha, upstreamSha)) {
-    throw new AutopatchError("FAILED_PLAN", "upstream history was rewritten since the last accepted checkpoint; inspect the rewrite and explicitly reinitialize the upstream checkpoint");
+    throw new AutoforkError("FAILED_PLAN", "upstream history was rewritten since the last accepted checkpoint; inspect the rewrite and explicitly reinitialize the upstream checkpoint");
   }
   const anchor2 = opts.checkpointSha ?? opts.initialBase;
   if (anchor2 && (!await git.isAncestor(anchor2, branchSha) || !await git.isAncestor(anchor2, upstreamSha))) {
-    throw new AutopatchError("FAILED_PLAN", "the upstream checkpoint/initial_base must be an ancestor of both the fork and upstream");
+    throw new AutoforkError("FAILED_PLAN", "the upstream checkpoint/initial_base must be an ancestor of both the fork and upstream");
   }
   const bases = await git.mergeBases(upstreamSha, branchSha);
   if (bases.length === 0) {
-    throw new AutopatchError(
+    throw new AutoforkError(
       "FAILED_PLAN",
       `"${opts.branch}" and ${upstreamRemote}/${opts.upstreamBranch} have unrelated histories; is this really a fork of ${upstreamRemote}?`
     );
   }
   if (bases.length > 1) {
-    throw new AutopatchError(
+    throw new AutoforkError(
       "FAILED_PLAN",
       `"${opts.branch}" and ${upstreamRemote}/${opts.upstreamBranch} have ${bases.length} merge bases (criss-cross history); linearize the fork branch by hand once, then rerun`,
       bases
@@ -46822,19 +46822,19 @@ async function computePlan(git, opts) {
   }
   const base = bases[0];
   if (opts.initialBase && !opts.checkpointSha && base !== await git.revParse(opts.initialBase)) {
-    throw new AutopatchError("FAILED_PLAN", "initial_base must equal the current merge base; inspect and linearize the fork before initialization");
+    throw new AutoforkError("FAILED_PLAN", "initial_base must equal the current merge base; inspect and linearize the fork before initialization");
   }
   const merges = await git.lines(["rev-list", "--merges", "--format=%h %s", "--no-commit-header", `${base}..${branchSha}`]);
   if (merges.length > 0) {
-    throw new AutopatchError(
+    throw new AutoforkError(
       "FAILED_PLAN",
-      `"${opts.branch}" contains ${merges.length} merge commit(s) on top of upstream; autopatch needs a linear patch series. Rebase once by hand: git rebase --onto ${upstreamRemote}/${opts.upstreamBranch} ${base.slice(0, 12)} ${opts.branch}`,
+      `"${opts.branch}" contains ${merges.length} merge commit(s) on top of upstream; autofork needs a linear patch series. Rebase once by hand: git rebase --onto ${upstreamRemote}/${opts.upstreamBranch} ${base.slice(0, 12)} ${opts.branch}`,
       merges
     );
   }
   const rawPatches = await listPatches(git, base, branchSha);
   if (rawPatches.length > opts.maxPatches) {
-    throw new AutopatchError(
+    throw new AutoforkError(
       "FAILED_PLAN",
       `"${opts.branch}" carries ${rawPatches.length} commits over upstream, above max_patches=${opts.maxPatches}; is upstream_branch correct?`
     );
@@ -46873,9 +46873,9 @@ async function computePlan(git, opts) {
 }
 
 // src/publish.ts
-var TEMP_BRANCH_PREFIX = "autopatch/";
-var BACKUP_PREFIX = "refs/autopatch/backup/";
-var checkpointRef = (branch) => `refs/autopatch/upstream/${branch}`;
+var TEMP_BRANCH_PREFIX = "autofork/";
+var BACKUP_PREFIX = "refs/autofork/backup/";
+var checkpointRef = (branch) => `refs/autofork/upstream/${branch}`;
 async function fetchCheckpoint(git, branch) {
   const ref = checkpointRef(branch);
   const remote = await git.lines(["ls-remote", "origin", ref]);
@@ -46971,27 +46971,27 @@ async function runPush(git, args) {
 }
 function classifyPushError(args, err, out = "") {
   if (/without `?workflow`? scope|workflows? permission|refusing to allow .* workflow/i.test(err)) {
-    return new AutopatchError(
+    return new AutoforkError(
       "FAILED_PUBLISH",
       'GitHub refused the push because it changes files under .github/workflows. The token needs the "Workflows" permission (fine-grained PAT: Workflows read/write; GitHub App: permission-workflows: write). The default GITHUB_TOKEN can never push workflow files.',
       [err.trim()]
     );
   }
   if (/stale info|force-with-lease/i.test(err)) {
-    return new AutopatchError(
+    return new AutoforkError(
       "FAILED_PUBLISH",
       "the branch moved on GitHub while this run was working, so the force-push was refused to avoid clobbering those commits. The rebased result is on the temporary branch; rerun the workflow.",
       [err.trim()]
     );
   }
   if (/protected branch|rule violations|GH006|GH013/i.test(err)) {
-    return new AutopatchError(
+    return new AutoforkError(
       "FAILED_PUBLISH",
       "a branch protection rule or ruleset blocked the force-push. Allow force pushes for the token owner (add it as a bypass actor) or disable the rule.",
       [err.trim()]
     );
   }
-  return new AutopatchError("FAILED_PUBLISH", `git ${args.join(" ")} failed: ${err.trim() || out.trim()}`);
+  return new AutoforkError("FAILED_PUBLISH", `git ${args.join(" ")} failed: ${err.trim() || out.trim()}`);
 }
 
 // src/recovery.ts
@@ -47041,9 +47041,9 @@ async function saveRecovery(git, plan, destination, records, currentPatch) {
   let indexCommit = head;
   if (blobs.size) {
     const tree = await git.out(["mktree", "-z"], { input: [...blobs].sort().map((sha2) => `100644 blob ${sha2}	${sha2}\0`).join("") });
-    indexCommit = await git.out(["commit-tree", tree, "-p", head], { input: "autopatch recovery index\n" });
+    indexCommit = await git.out(["commit-tree", tree, "-p", head], { input: "autofork recovery index\n" });
   }
-  const refs = { "refs/autopatch/recovery/upstream": plan.upstreamSha, "refs/autopatch/recovery/partial": head, "refs/autopatch/recovery/index": indexCommit };
+  const refs = { "refs/autofork/recovery/upstream": plan.upstreamSha, "refs/autofork/recovery/partial": head, "refs/autofork/recovery/index": indexCommit };
   const bundleDigest = await writeIncrementalBundle(git, path13.join(next, "history.bundle"), plan.branchSha, refs);
   const recovery = { version: 2, ...content, indexCommit, bundleDigest, signature };
   await fs17.writeFile(path13.join(next, "recovery.json"), JSON.stringify(recovery, null, 2));
@@ -47156,7 +47156,7 @@ function normalizeRepoUrl(u) {
 async function run(inputs, env, deps) {
   const { log } = deps;
   const startedAt = (/* @__PURE__ */ new Date()).toISOString();
-  const base = path14.join(env.runnerTemp, "autopatch");
+  const base = path14.join(env.runnerTemp, "autofork");
   const resultsDir = path14.join(base, "results");
   const holdDir = path14.join(base, "hold");
   const wtDir = path14.join(base, "wt");
@@ -47234,7 +47234,7 @@ async function run(inputs, env, deps) {
     const upstreamGit = await git.authenticated(inputs.upstreamToken, "upstream");
     const branch = inputs.branch ?? await git.remoteDefaultBranch("origin");
     const upstreamBranch = inputs.upstreamBranch ?? await upstreamGit.remoteDefaultBranch("upstream");
-    if (!branch || !upstreamBranch) throw new AutopatchError("FAILED_PLAN", "could not discover default branches; check read credentials or specify branch and upstream_branch");
+    if (!branch || !upstreamBranch) throw new AutoforkError("FAILED_PLAN", "could not discover default branches; check read credentials or specify branch and upstream_branch");
     for (const name of [branch, upstreamBranch]) await git.run(["check-ref-format", "--branch", name]);
     await git.run(["fetch", "--no-tags", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`]);
     log.info(`fetching upstream ${inputs.upstream} (${upstreamBranch})`);
@@ -47330,7 +47330,7 @@ async function run(inputs, env, deps) {
     const installedBackends = [workerBackend];
     const checkCapabilities = (backend) => {
       if (inputs.requireHardLimits && (!backend.capabilities?.budgetLimit || !backend.capabilities.turnLimit)) {
-        throw new AutopatchError("FAILED_PLAN", `${backend.name} cannot enforce dollar and turn limits; require_hard_limits is incompatible with this backend`);
+        throw new AutoforkError("FAILED_PLAN", `${backend.name} cannot enforce dollar and turn limits; require_hard_limits is incompatible with this backend`);
       }
     };
     checkCapabilities(workerBackend);
@@ -47418,7 +47418,7 @@ async function run(inputs, env, deps) {
     await exportCandidate(outcome, "approved");
     return await finish("PREPARED", `${consensus.reason}; immutable candidate exported for isolated verification`);
   } catch (err) {
-    if (err instanceof AutopatchError) return await fail(err.state, err.message, err.details);
+    if (err instanceof AutoforkError) return await fail(err.state, err.message, err.details);
     const message = err instanceof Error ? err.stack ?? err.message : String(err);
     return await fail(report.outcome ? "FAILED_GATE" : report.plan ? "FAILED_REBASE" : "FAILED_PLAN", `unexpected error: ${message}`);
   } finally {
@@ -47431,15 +47431,15 @@ var fs19 = __toESM(require("node:fs/promises"), 1);
 var path15 = __toESM(require("node:path"), 1);
 
 // src/issue.ts
-var ISSUE_LABEL = "autopatch";
+var ISSUE_LABEL = "autofork";
 function issueTitle(branch) {
-  return `autopatch: rebase of ${branch} needs attention`;
+  return `autofork: rebase of ${branch} needs attention`;
 }
 async function ensureLabel(api, owner, repo) {
   try {
     await api.getLabel({ owner, repo, name: ISSUE_LABEL });
   } catch {
-    await api.createLabel({ owner, repo, name: ISSUE_LABEL, color: "7057ff", description: "Opened by the autopatch action when a rebase needs a human" }).catch(() => void 0);
+    await api.createLabel({ owner, repo, name: ISSUE_LABEL, color: "7057ff", description: "Opened by the autofork action when a rebase needs a human" }).catch(() => void 0);
   }
 }
 async function findOpen(api, owner, repo, title) {
@@ -47452,7 +47452,7 @@ async function upsertFailureIssue(api, owner, repo, branch, body, log) {
   const existing = await findOpen(api, owner, repo, title);
   if (existing) {
     const { data: data2 } = await api.update({ owner, repo, issue_number: existing, body });
-    await api.createComment({ owner, repo, issue_number: existing, body: "A new autopatch run failed; the issue body was updated with the latest details." });
+    await api.createComment({ owner, repo, issue_number: existing, body: "A new autofork run failed; the issue body was updated with the latest details." });
     log.info(`updated issue #${existing}`);
     return data2.html_url;
   }
@@ -47471,14 +47471,14 @@ async function closeFailureIssue(api, owner, repo, branch, comment, log) {
 // src/phases.ts
 function checkContext(candidate, inputs, env) {
   if (candidate.runId !== env.runId || candidate.repository !== inputs.repository || candidate.upstream !== inputs.upstream || inputs.branch && candidate.branch !== inputs.branch || inputs.upstreamBranch && candidate.upstreamBranch !== inputs.upstreamBranch || candidate.verifyCommand !== (inputs.verifyCommand ?? null)) {
-    throw new AutopatchError("FAILED_TAMPERED", "candidate does not match this run, repository, branch, upstream, or verification command");
+    throw new AutoforkError("FAILED_TAMPERED", "candidate does not match this run, repository, branch, upstream, or verification command");
   }
 }
 async function runPhase(inputs, env, deps) {
   const { log } = deps;
   const phase = inputs.phase;
   if (phase !== "verify" && phase !== "publish" && phase !== "report") throw new Error("runPhase requires verify, publish, or report");
-  const base = path15.join(env.runnerTemp, `autopatch-${phase}`);
+  const base = path15.join(env.runnerTemp, `autofork-${phase}`);
   await fs19.rm(base, { recursive: true, force: true });
   const resultsDir = path15.join(base, "results");
   await fs19.mkdir(resultsDir, { recursive: true });
@@ -47487,11 +47487,11 @@ async function runPhase(inputs, env, deps) {
     if (!inputs.artifactDir || !inputs.resultsDigest) throw new Error("report requires artifact_dir and results_digest from the failed job");
     const failed = await readBoundJson(path15.join(inputs.artifactDir, "results.json"), inputs.resultsDigest);
     if (failed.repository !== inputs.repository || failed.upstream !== inputs.upstream || failed.runId !== env.runId || !failed.state.startsWith("FAILED_")) {
-      throw new AutopatchError("FAILED_TAMPERED", "failure report does not match this run");
+      throw new AutoforkError("FAILED_TAMPERED", "failure report does not match this run");
     }
     if (inputs.rescueBranch) {
       const prefix = tempBranchName(env.runId, "");
-      if (!inputs.rescueBranch.startsWith(prefix) || !/^\d+$/.test(inputs.rescueBranch.slice(prefix.length))) throw new AutopatchError("FAILED_TAMPERED", "rescue branch belongs to a different run");
+      if (!inputs.rescueBranch.startsWith(prefix) || !/^\d+$/.test(inputs.rescueBranch.slice(prefix.length))) throw new AutoforkError("FAILED_TAMPERED", "rescue branch belongs to a different run");
       failed.tempBranch = inputs.rescueBranch;
       failed.tempBranchRemote = true;
     }
@@ -47535,7 +47535,7 @@ async function runPhase(inputs, env, deps) {
     error: null
   };
   try {
-    if (!inputs.artifactDir || !inputs.candidateDigest) throw new AutopatchError("FAILED_PLAN", "artifact_dir and candidate_digest from the prepare job are required");
+    if (!inputs.artifactDir || !inputs.candidateDigest) throw new AutoforkError("FAILED_PLAN", "artifact_dir and candidate_digest from the prepare job are required");
     const { git, candidate, plan } = await importCandidate(inputs.artifactDir, inputs.candidateDigest, path15.join(base, "repo"), {
       source: inputs.forkRemoteUrl ?? `${env.serverUrl}/${inputs.repository}.git`,
       token: inputs.token,
@@ -47577,7 +47577,7 @@ async function runPhase(inputs, env, deps) {
         sandbox: inputs.sandbox ?? false
       });
       report.gates = gates;
-      if (!gates.ok) throw new AutopatchError("FAILED_GATE", "isolated verification failed", gates.failures);
+      if (!gates.ok) throw new AutoforkError("FAILED_GATE", "isolated verification failed", gates.failures);
       await assertCandidate(git, candidate);
       report.artifactDir = path15.join(resultsDir, "verification");
       await fs19.mkdir(report.artifactDir);
@@ -47597,16 +47597,16 @@ async function runPhase(inputs, env, deps) {
       report.reason = "the exact candidate passed verification on a fresh checkout";
     } else {
       if (candidate.approval === "approved") {
-        if (!inputs.verificationDir || !inputs.verificationDigest) throw new AutopatchError("FAILED_PLAN", "verification_dir and verification_digest from the verification job are required");
+        if (!inputs.verificationDir || !inputs.verificationDigest) throw new AutoforkError("FAILED_PLAN", "verification_dir and verification_digest from the verification job are required");
         const verification = verificationSchema.parse(await readBoundJson(path15.join(inputs.verificationDir, "verification.json"), inputs.verificationDigest));
         if (verification.candidateDigest !== inputs.candidateDigest || verification.runId !== env.runId || verification.headSha !== candidate.headSha || verification.treeSha !== candidate.treeSha || verification.verifyCommand !== (inputs.verifyCommand ?? null)) {
-          throw new AutopatchError("FAILED_TAMPERED", "verification belongs to a different candidate, run, or command");
+          throw new AutoforkError("FAILED_TAMPERED", "verification belongs to a different candidate, run, or command");
         }
       }
       await git.ensureRemote("origin", inputs.forkRemoteUrl ?? `${env.serverUrl}/${inputs.repository}.git`);
       const remote = await git.authenticated(inputs.token);
       const branch = inputs.branch ?? await remote.remoteDefaultBranch("origin");
-      if (branch !== candidate.branch) throw new AutopatchError("FAILED_PLAN", "candidate branch differs from the maintained branch");
+      if (branch !== candidate.branch) throw new AutoforkError("FAILED_PLAN", "candidate branch differs from the maintained branch");
       const prior = candidate.approval === "approved" && candidate.autoEligible && inputs.publish === "auto" ? await findPublishedCandidate(remote, branch, env.runId, candidate.originalSha, candidate.headSha, candidate.upstreamSha) : void 0;
       if (prior) {
         report.publish = { backupRef: prior, pushed: true, prunedBackups: [] };
@@ -47614,7 +47614,7 @@ async function runPhase(inputs, env, deps) {
         report.reason = "this exact candidate was already published by an earlier attempt";
       } else {
         const checkpointSha = await fetchCheckpoint(remote, branch);
-        if ((checkpointSha ?? null) !== candidate.checkpointSha) throw new AutopatchError("FAILED_PUBLISH", "upstream checkpoint changed since planning");
+        if ((checkpointSha ?? null) !== candidate.checkpointSha) throw new AutoforkError("FAILED_PUBLISH", "upstream checkpoint changed since planning");
         const ctx = {
           git: remote,
           branch,
@@ -47647,9 +47647,9 @@ async function runPhase(inputs, env, deps) {
       }
     }
   } catch (e) {
-    report.state = e instanceof AutopatchError ? e.state : phase === "publish" ? "FAILED_PUBLISH" : "FAILED_GATE";
+    report.state = e instanceof AutoforkError ? e.state : phase === "publish" ? "FAILED_PUBLISH" : "FAILED_GATE";
     report.reason = e instanceof Error ? e.message : String(e);
-    report.error = { message: report.reason, details: e instanceof AutopatchError ? e.details : [] };
+    report.error = { message: report.reason, details: e instanceof AutoforkError ? e.details : [] };
     if (phase === "publish" && deps.issues && !inputs.dryRun) {
       const [owner, repo] = inputs.repository.split("/");
       await upsertFailureIssue(deps.issues, owner, repo, report.plan?.branch ?? inputs.branch ?? "default branch", renderSummary(report, { forIssue: true }), log).catch((err) => report.notes.push(`issue reporting failed: ${String(err)}`));
@@ -47685,7 +47685,7 @@ async function main() {
   setOutput("branch_sha", report.headSha ?? "");
   setOutput("backup_ref", report.publish?.backupRef ?? "");
   setOutput("temp_branch", report.tempBranchRemote && !report.publish?.pushed ? report.tempBranch ?? "" : "");
-  const resultsDir = `${env.runnerTemp}/${inputs.phase === "prepare" ? "autopatch" : `autopatch-${inputs.phase}`}/results`;
+  const resultsDir = `${env.runnerTemp}/${inputs.phase === "prepare" ? "autofork" : `autofork-${inputs.phase}`}/results`;
   setOutput("results_dir", resultsDir);
   setOutput("results_digest", await fileDigest(`${resultsDir}/results.json`));
   setOutput("artifact_dir", report.artifactDir ?? "");

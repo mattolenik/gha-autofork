@@ -10,17 +10,17 @@ export interface IssuesApi {
   createLabel(params: { owner: string; repo: string; name: string; color: string; description: string }): Promise<unknown>;
 }
 
-export const ISSUE_LABEL = 'autopatch';
+export const ISSUE_LABEL = 'autofork';
 
 export function issueTitle(branch: string): string {
-  return `autopatch: rebase of ${branch} needs attention`;
+  return `autofork: rebase of ${branch} needs attention`;
 }
 
 async function ensureLabel(api: IssuesApi, owner: string, repo: string): Promise<void> {
   try {
     await api.getLabel({ owner, repo, name: ISSUE_LABEL });
   } catch {
-    await api.createLabel({ owner, repo, name: ISSUE_LABEL, color: '7057ff', description: 'Opened by the autopatch action when a rebase needs a human' }).catch(() => undefined);
+    await api.createLabel({ owner, repo, name: ISSUE_LABEL, color: '7057ff', description: 'Opened by the autofork action when a rebase needs a human' }).catch(() => undefined);
   }
 }
 
@@ -36,7 +36,7 @@ export async function upsertFailureIssue(api: IssuesApi, owner: string, repo: st
   const existing = await findOpen(api, owner, repo, title);
   if (existing) {
     const { data } = await api.update({ owner, repo, issue_number: existing, body });
-    await api.createComment({ owner, repo, issue_number: existing, body: 'A new autopatch run failed; the issue body was updated with the latest details.' });
+    await api.createComment({ owner, repo, issue_number: existing, body: 'A new autofork run failed; the issue body was updated with the latest details.' });
     log.info(`updated issue #${existing}`);
     return data.html_url;
   }

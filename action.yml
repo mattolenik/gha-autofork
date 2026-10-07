@@ -1,4 +1,4 @@
-name: autopatch
+name: autofork
 description: >-
   Rebase a personal fork's default branch onto upstream with AI agents resolving conflicts and a
   second agent from another provider reviewing until both agree. Force-pushes with backup refs.
@@ -89,7 +89,7 @@ inputs:
     required: false
     default: '30'
   keep_backups:
-    description: Number of refs/autopatch/backup entries to keep.
+    description: Number of refs/autofork/backup entries to keep.
     required: false
     default: '10'
   publish:

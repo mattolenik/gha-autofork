@@ -6,7 +6,7 @@ import { sandboxCommand } from '../src/sandbox.js';
 import { buildChildEnv } from '../src/env.js';
 import { spawnCollect } from '../src/agents/process.js';
 
-const root = await fs.mkdtemp(path.join(os.tmpdir(), 'autopatch-dns-'));
+const root = await fs.mkdtemp(path.join(os.tmpdir(), 'autofork-dns-'));
 try {
   const git = new Git(root);
   await git.run(['init', '-q']);

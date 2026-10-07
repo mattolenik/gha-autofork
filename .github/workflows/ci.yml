@@ -95,7 +95,7 @@ jobs:
           test "$STATE" = APPROVED
           test "$(git --git-dir "$ORIGIN" rev-parse main)" = "$SHA"
           git --git-dir "$ORIGIN" rev-parse --verify "$BACKUP"
-          test -z "$(git --git-dir "$ORIGIN" for-each-ref 'refs/heads/autopatch/*')"
+          test -z "$(git --git-dir "$ORIGIN" for-each-ref 'refs/heads/autofork/*')"
           test "$(git --git-dir "$ORIGIN" rev-list --count "$(git --git-dir "$ORIGIN" rev-parse main~2)..main")" = 2
           git --git-dir "$ORIGIN" show main:src/lib.js | grep -q "HELLO, "
           test -f "${{ steps.ok.outputs.results_dir }}/results.json"

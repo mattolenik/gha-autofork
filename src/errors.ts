@@ -20,18 +20,18 @@ export const STATES = [
 export type State = (typeof STATES)[number];
 export type FailureState = Extract<State, `FAILED_${string}`>;
 
-export class AutopatchError extends Error {
+export class AutoforkError extends Error {
   readonly state: FailureState;
   readonly details: string[];
 
   constructor(state: FailureState, message: string, details: string[] = []) {
     super(message);
-    this.name = 'AutopatchError';
+    this.name = 'AutoforkError';
     this.state = state;
     this.details = details;
   }
 }
 
-export function isAutopatchError(err: unknown): err is AutopatchError {
-  return err instanceof AutopatchError;
+export function isAutoforkError(err: unknown): err is AutoforkError {
+  return err instanceof AutoforkError;
 }

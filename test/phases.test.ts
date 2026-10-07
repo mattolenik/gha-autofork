@@ -49,7 +49,7 @@ describe('isolated phases', () => {
     expect(await fx.fork.out(['ls-remote', 'origin', published.publish!.backupRef])).toContain(old);
     expect(await fx.fork.out(['ls-remote', 'origin', checkpointRef('main')])).toContain(prepared.plan!.kind === 'nothing_to_do' ? '' : prepared.plan!.upstreamSha);
     // Publisher imported objects into a bare repo; it never checked out source.
-    await expect(fs.access(path.join(env().runnerTemp, 'autopatch-publish/repo/README.md'))).rejects.toThrow();
+    await expect(fs.access(path.join(env().runnerTemp, 'autofork-publish/repo/README.md'))).rejects.toThrow();
   });
 
   it('initializes an unchanged fork without bundling its existing history', async () => {
@@ -165,10 +165,10 @@ describe('isolated phases', () => {
     const head = await commitFiles(fx.fork, { 'new.txt': 'new\n' }, 'new');
     const original = fx.fork.lines.bind(fx.fork);
     fx.fork.lines = async (args, options) => {
-      if (args[0] === 'ls-remote' && args[2]?.startsWith('refs/autopatch/backup/')) throw new Error('listing failed');
+      if (args[0] === 'ls-remote' && args[2]?.startsWith('refs/autofork/backup/')) throw new Error('listing failed');
       return original(args, options);
     };
-    const result = await publishBranch({ git: fx.fork, branch: 'main', leaseSha: old, runId: 'cleanup', dryRun: false, log }, head, 'autopatch/temp', 10);
+    const result = await publishBranch({ git: fx.fork, branch: 'main', leaseSha: old, runId: 'cleanup', dryRun: false, log }, head, 'autofork/temp', 10);
     expect(result.pushed).toBe(true);
     expect(result.warnings!.join('\n')).toContain('listing failed');
     expect(await originSha()).toBe(head);
@@ -189,7 +189,7 @@ describe('isolated phases', () => {
     await advanceUpstream(fx, { 'upstream.txt': 'new\n' }, 'upstream');
     const failed = await run(inputs(), env(), { log, createBackend: () => new FakeBackend(undefined, { review: [{ verdict: 'reject', summary: 'cannot approve' }] }) });
     expect(failed.state).toBe('FAILED_CONTESTED');
-    const dir = path.join(env().runnerTemp, 'autopatch/results');
+    const dir = path.join(env().runnerTemp, 'autofork/results');
     const bodies: string[] = [];
     const reported = await runPhase(inputs({ phase: 'report', artifactDir: dir, resultsDigest: await fileDigest(path.join(dir, 'results.json')) }), env(), { log, issues: {
       listForRepo: async () => ({ data: [] }), getLabel: async () => undefined, createLabel: async () => undefined,

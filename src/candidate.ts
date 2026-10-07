@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { z } from 'zod';
-import { AutopatchError } from './errors.js';
+import { AutoforkError } from './errors.js';
 import { Git } from './git.js';
 import type { RebasePlan } from './plan.js';
 import type { RebaseOutcome } from './rebase.js';
@@ -27,9 +27,9 @@ export const verificationSchema = z.object({
 }).strict();
 
 export async function readBoundJson(file: string, expected: string): Promise<unknown> {
-  if (!/^[0-9a-f]{64}$/.test(expected)) throw new AutopatchError('FAILED_GATE', 'the producing job must supply the artifact SHA-256 digest');
+  if (!/^[0-9a-f]{64}$/.test(expected)) throw new AutoforkError('FAILED_GATE', 'the producing job must supply the artifact SHA-256 digest');
   if ((await fs.lstat(file)).size > 5 * 1024 * 1024) throw new Error('artifact manifest is too large');
-  if (await fileDigest(file) !== expected) throw new AutopatchError('FAILED_TAMPERED', 'artifact digest differs from the producing job output');
+  if (await fileDigest(file) !== expected) throw new AutoforkError('FAILED_TAMPERED', 'artifact digest differs from the producing job output');
   return JSON.parse(await fs.readFile(file, 'utf8')) as unknown;
 }
 
@@ -38,7 +38,7 @@ export async function writeCandidate(git: Git, directory: string, plan: RebasePl
   const identity = await candidateIdentity(git);
   await assertCandidate(git, { headSha: outcome.headSha, treeSha: identity.treeSha });
   await fs.mkdir(directory, { recursive: true });
-  const refs = { 'refs/autopatch/candidate/upstream': plan.upstreamSha, 'refs/autopatch/candidate/head': identity.headSha };
+  const refs = { 'refs/autofork/candidate/upstream': plan.upstreamSha, 'refs/autofork/candidate/head': identity.headSha };
   const bundle = path.join(directory, 'candidate.bundle');
   const bundleDigest = await writeIncrementalBundle(git, bundle, plan.branchSha, refs);
   const candidate = candidateSchema.parse({ version: 2, ...metadata, ...identity,
@@ -61,23 +61,23 @@ export async function importCandidate(directory: string, expectedDigest: string,
   await git.run(['init', '-q', ...(options.bare ? ['--bare'] : [])]);
   for (const branch of [candidate.branch, candidate.upstreamBranch]) await git.run(['check-ref-format', '--branch', branch]);
   git = await fetchBasis(git, options.source, candidate.originalSha, options.token);
-  const refs = { 'refs/autopatch/candidate/upstream': candidate.upstreamSha, 'refs/autopatch/candidate/head': candidate.headSha };
+  const refs = { 'refs/autofork/candidate/upstream': candidate.upstreamSha, 'refs/autofork/candidate/head': candidate.headSha };
   await importIncrementalBundle(git, bundle, candidate.bundleDigest, candidate.originalSha, refs);
   if (await git.tree(candidate.headSha) !== candidate.treeSha || !(await git.isAncestor(candidate.upstreamSha, candidate.headSha))) {
-    throw new AutopatchError('FAILED_GATE', 'candidate tree or upstream ancestry is invalid');
+    throw new AutoforkError('FAILED_GATE', 'candidate tree or upstream ancestry is invalid');
   }
   const bases = await git.mergeBases(candidate.originalSha, candidate.upstreamSha);
-  if (bases.length !== 1 || bases[0] !== candidate.baseSha) throw new AutopatchError('FAILED_GATE', 'candidate has an invalid original merge base');
-  if (candidate.checkpointSha && !(await git.isAncestor(candidate.checkpointSha, candidate.upstreamSha))) throw new AutopatchError('FAILED_PLAN', 'upstream rewrote its checkpoint');
+  if (bases.length !== 1 || bases[0] !== candidate.baseSha) throw new AutoforkError('FAILED_GATE', 'candidate has an invalid original merge base');
+  if (candidate.checkpointSha && !(await git.isAncestor(candidate.checkpointSha, candidate.upstreamSha))) throw new AutoforkError('FAILED_PLAN', 'upstream rewrote its checkpoint');
   const originals = await git.lines(['rev-list', '--reverse', `${candidate.baseSha}..${candidate.originalSha}`]);
   const survivors = candidate.patches.filter(p => p.result === 'applied');
   const actual = await git.lines(['rev-list', '--reverse', `${candidate.upstreamSha}..${candidate.headSha}`]);
   if (JSON.stringify(originals) !== JSON.stringify(candidate.patches.map(p => p.original)) ||
     JSON.stringify(actual) !== JSON.stringify(survivors.map(p => p.current)) || candidate.patches.some(p => (p.current !== null) !== survivors.includes(p))) {
-    throw new AutopatchError('FAILED_GATE', 'candidate patch accounting or ordering is invalid');
+    throw new AutoforkError('FAILED_GATE', 'candidate patch accounting or ordering is invalid');
   }
   for (const range of [`${candidate.baseSha}..${candidate.originalSha}`, `${candidate.upstreamSha}..${candidate.headSha}`]) {
-    if ((await git.lines(['rev-list', '--merges', range])).length) throw new AutopatchError('FAILED_GATE', 'candidate patch series contains merges');
+    if ((await git.lines(['rev-list', '--merges', range])).length) throw new AutoforkError('FAILED_GATE', 'candidate patch series contains merges');
   }
   if (!options.bare) await git.run(['checkout', '-q', '--detach', candidate.headSha]);
   const descriptions = await git.lines(['log', '--reverse', '--format=%H%x1f%an%x1f%s', `${candidate.baseSha}..${candidate.originalSha}`]);
@@ -86,7 +86,7 @@ export async function importCandidate(directory: string, expectedDigest: string,
     return { sha, author, subject: subject.join('\x1f'), absorbed: candidate.patches[i]!.result === 'absorbed' };
   });
   const plan: RebasePlan = { kind: 'rebase', branch: candidate.branch, upstreamBranch: candidate.upstreamBranch,
-    upstreamRef: 'refs/autopatch/candidate/upstream', branchSha: candidate.originalSha, upstreamSha: candidate.upstreamSha, base: candidate.baseSha,
+    upstreamRef: 'refs/autofork/candidate/upstream', branchSha: candidate.originalSha, upstreamSha: candidate.upstreamSha, base: candidate.baseSha,
     patches, expectedSurvivors: survivors.length, upstreamCommits: await git.revListCount(`${candidate.baseSha}..${candidate.upstreamSha}`), workflowPaths: [] };
   return { git, candidate, plan };
 }

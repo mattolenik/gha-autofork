@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { AutopatchError } from './errors.js';
+import { AutoforkError } from './errors.js';
 import { validateFilePath } from './state.js';
 
 /**
@@ -55,7 +55,7 @@ export async function quarantine(worktree: string, holdDir: string, keep: Iterab
     const src = path.join(worktree, rel);
     if (!(await exists(src))) return;
     if ([...keepSet].some(p => p.startsWith(`${rel}/`))) {
-      if (!(await fs.lstat(src)).isDirectory()) throw new AutopatchError('FAILED_TAMPERED', 'instruction directory was replaced by a symlink or file');
+      if (!(await fs.lstat(src)).isDirectory()) throw new AutoforkError('FAILED_TAMPERED', 'instruction directory was replaced by a symlink or file');
       for (const name of await fs.readdir(src)) await move(`${rel}/${name}`);
       return;
     }
@@ -81,7 +81,7 @@ export async function quarantine(worktree: string, holdDir: string, keep: Iterab
     async restore() {
       if (restored) return;
       restored = true;
-      if (await fs.realpath(worktree) !== root) throw new AutopatchError('FAILED_TAMPERED', 'worktree root changed during quarantine');
+      if (await fs.realpath(worktree) !== root) throw new AutoforkError('FAILED_TAMPERED', 'worktree root changed during quarantine');
       const recreated: string[] = [];
       for (const rel of moved) {
         const src = path.join(holdDir, rel);
@@ -89,14 +89,14 @@ export async function quarantine(worktree: string, holdDir: string, keep: Iterab
         if (!(await exists(src))) continue;
         if (path.dirname(rel) !== '.') {
           try { await validateFilePath(worktree, `${path.dirname(rel)}/__restore_probe__`); }
-          catch { throw new AutopatchError('FAILED_TAMPERED', 'agent replaced a quarantined file ancestor', [rel]); }
+          catch { throw new AutoforkError('FAILED_TAMPERED', 'agent replaced a quarantined file ancestor', [rel]); }
         }
         if (await exists(dst)) recreated.push(rel);
         await fs.rm(dst, { recursive: true, force: true });
         await fs.mkdir(path.dirname(dst), { recursive: true });
         await fs.rename(src, dst);
       }
-      if (recreated.length) throw new AutopatchError('FAILED_TAMPERED', 'agent recreated quarantined instruction files', recreated);
+      if (recreated.length) throw new AutoforkError('FAILED_TAMPERED', 'agent recreated quarantined instruction files', recreated);
     },
   };
 }

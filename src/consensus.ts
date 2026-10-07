@@ -1,5 +1,5 @@
 import type { AgentRunner } from './agents/runner.js';
-import { AutopatchError } from './errors.js';
+import { AutoforkError } from './errors.js';
 import { foldChanges, resolvePatchRef } from './fixup.js';
 import type { GateResult } from './gates.js';
 import type { Git } from './git.js';
@@ -242,7 +242,7 @@ export async function runConsensus(o: ConsensusOptions): Promise<ConsensusResult
         targetPatch: targets.size === 1 ? [...targets][0]! : null,
         log,
       }).catch((e: unknown) => {
-        throw new AutopatchError('FAILED_GATE', `could not fold the worker's review fixes into the patch series: ${e instanceof Error ? e.message : String(e)}`);
+        throw new AutoforkError('FAILED_GATE', `could not fold the worker's review fixes into the patch series: ${e instanceof Error ? e.message : String(e)}`);
       });
       entry.foldWarnings = fold.warnings;
       outcome.mapping = fold.mapping;

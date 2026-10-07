@@ -10,7 +10,7 @@ import { Git } from '../src/git.js';
 import { buildChildEnv } from '../src/env.js';
 import { silentLogger } from '../src/log.js';
 
-const root = await fs.mkdtemp(path.join(os.tmpdir(), 'autopatch-cli-smoke-'));
+const root = await fs.mkdtemp(path.join(os.tmpdir(), 'autofork-cli-smoke-'));
 try {
   const git = new Git(root);
   await git.run(['init', '-q']);

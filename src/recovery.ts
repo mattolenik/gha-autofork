@@ -68,9 +68,9 @@ export async function saveRecovery(git: Git, plan: RebasePlan, destination: stri
   let indexCommit = head;
   if (blobs.size) {
     const tree = await git.out(['mktree', '-z'], { input: [...blobs].sort().map(sha => `100644 blob ${sha}\t${sha}\0`).join('') });
-    indexCommit = await git.out(['commit-tree', tree, '-p', head], { input: 'autopatch recovery index\n' });
+    indexCommit = await git.out(['commit-tree', tree, '-p', head], { input: 'autofork recovery index\n' });
   }
-  const refs = { 'refs/autopatch/recovery/upstream': plan.upstreamSha, 'refs/autopatch/recovery/partial': head, 'refs/autopatch/recovery/index': indexCommit };
+  const refs = { 'refs/autofork/recovery/upstream': plan.upstreamSha, 'refs/autofork/recovery/partial': head, 'refs/autofork/recovery/index': indexCommit };
   const bundleDigest = await writeIncrementalBundle(git, path.join(next, 'history.bundle'), plan.branchSha, refs);
   const recovery: Recovery = { version: 2, ...content, indexCommit, bundleDigest, signature };
   await fs.writeFile(path.join(next, 'recovery.json'), JSON.stringify(recovery, null, 2));
@@ -89,7 +89,7 @@ export async function restoreRecovery(source: string, destination: string, basis
   await git.run(['init', '-q']);
   git = await fetchBasis(git, basisSource, r.original, token);
   await importIncrementalBundle(git, path.resolve(source, 'history.bundle'), r.bundleDigest, r.original,
-    { 'refs/autopatch/recovery/upstream': r.upstream, 'refs/autopatch/recovery/partial': r.head, 'refs/autopatch/recovery/index': r.indexCommit });
+    { 'refs/autofork/recovery/upstream': r.upstream, 'refs/autofork/recovery/partial': r.head, 'refs/autofork/recovery/index': r.indexCommit });
   await git.run(['checkout', '-q', '--detach', r.head]);
   for (const file of r.files) {
     await validateFilePath(destination, file.path);
@@ -117,21 +117,21 @@ export async function restoreRecovery(source: string, destination: string, basis
   }
   const removals = r.files.map(file => `0 ${'0'.repeat(40)}\t${file.path}\0`).join('');
   if (removals || r.index) await git.run(['update-index', '-z', '--index-info'], { input: removals + r.index });
-  await git.run(['update-ref', 'refs/heads/autopatch-rescue', r.original]);
+  await git.run(['update-ref', 'refs/heads/autofork-rescue', r.original]);
   if (Object.keys(r.rebase).length) {
     const dir = await git.gitPath('rebase-merge');
     await fs.mkdir(dir);
     for (const [name, content] of Object.entries(r.rebase)) {
       if (!/^[a-z0-9][a-z0-9.-]*$/.test(name) || name.includes('..')) throw new Error('invalid rebase metadata filename');
       if (name === 'git-rebase-todo' && content.split('\n').some(line => line.trim() && !/^(#|pick |drop )/.test(line))) throw new Error('recovery todo contains unsupported commands');
-      await fs.writeFile(path.join(dir, name), name === 'head-name' ? 'refs/heads/autopatch-rescue\n' : content);
+      await fs.writeFile(path.join(dir, name), name === 'head-name' ? 'refs/heads/autofork-rescue\n' : content);
     }
     if (r.currentPatch) {
       if (!/^[0-9a-f]{40}$/.test(r.currentPatch)) throw new Error('invalid current patch');
       await git.run(['update-ref', 'REBASE_HEAD', r.currentPatch]);
     }
   } else {
-    await git.run(['update-ref', 'refs/heads/autopatch-rescue', r.head]);
-    await git.run(['symbolic-ref', 'HEAD', 'refs/heads/autopatch-rescue']);
+    await git.run(['update-ref', 'refs/heads/autofork-rescue', r.head]);
+    await git.run(['symbolic-ref', 'HEAD', 'refs/heads/autofork-rescue']);
   }
 }

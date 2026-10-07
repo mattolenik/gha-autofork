@@ -77,7 +77,7 @@ async function go(script: FakeScript, overrides: Partial<Inputs> = {}, workspace
     { runId: '77', runAttempt: '1', workspace, runnerTemp, serverUrl: 'https://github.com', runUrl: 'https://github.com/matt/widgets/actions/runs/77' },
     { log: silentLogger, issues: issues.api, createBackend: () => backend },
   );
-  return { report, issues, backend, resultsDir: path.join(runnerTemp, 'autopatch', 'results') };
+  return { report, issues, backend, resultsDir: path.join(runnerTemp, 'autofork', 'results') };
 }
 
 describe('run (end to end with the fake backend)', () => {
@@ -89,7 +89,7 @@ describe('run (end to end with the fake backend)', () => {
     expect(report.reason).toMatch(/immutable candidate/);
     expect(await originRef(`refs/heads/${fx.branch}`)).toBe(fx.patchShas[2]);
     expect(report.publish).toBeNull();
-    expect(await originRef('refs/heads/autopatch/77-1')).toBeUndefined();
+    expect(await originRef('refs/heads/autofork/77-1')).toBeUndefined();
     expect(report.costUsd).toBeCloseTo(0.3); // resolve + selfcheck + review
     expect(report.agentCalls).toBe(3);
     expect(report.outcome!.records.map((r) => r.result)).toEqual(['applied', 'applied', 'applied']);
@@ -124,7 +124,7 @@ describe('run (end to end with the fake backend)', () => {
     });
     expect(report.state).toBe('FAILED_CONTESTED');
     expect(await originRef(`refs/heads/${fx.branch}`)).toBe(fx.patchShas[2]);
-    expect(await originRef('refs/heads/autopatch/77-1')).toBeUndefined();
+    expect(await originRef('refs/heads/autofork/77-1')).toBeUndefined();
     expect(issues.calls).toEqual([]);
     expect(report.consensus!.rounds[0]!.verdict!.issues[0]!.id).toBe('I1');
     await expect(fs.access(path.join(report.recoveryDir!, 'history.bundle'))).resolves.toBeUndefined();
@@ -165,12 +165,12 @@ describe('run (end to end with the fake backend)', () => {
     await advanceUpstream(fx, { 'x.txt': 'x\n' }, 'upstream: x');
     const staged = await go({}, { publish: 'stage' });
     expect(staged.report.state).toBe('PREPARED');
-    expect(await originRef('refs/heads/autopatch/77-1')).toBeUndefined();
+    expect(await originRef('refs/heads/autofork/77-1')).toBeUndefined();
     expect(await originRef(`refs/heads/${fx.branch}`)).toBe(fx.patchShas[2]);
 
     const dry = await go({}, { dryRun: true });
     expect(dry.report.state).toBe('PREPARED');
-    expect(await originRef('refs/heads/autopatch/77-1')).toBeUndefined();
+    expect(await originRef('refs/heads/autofork/77-1')).toBeUndefined();
     expect(await originRef(`refs/heads/${fx.branch}`)).toBe(fx.patchShas[2]);
   });
 
@@ -186,7 +186,7 @@ describe('run (end to end with the fake backend)', () => {
       { log: silentLogger, issues: null },
     );
     expect(report.state).toBe('PREPARED');
-    expect(report.tempBranch).toBe('autopatch/78-2');
+    expect(report.tempBranch).toBe('autofork/78-2');
   });
 });
 

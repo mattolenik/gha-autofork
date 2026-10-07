@@ -8,12 +8,12 @@ import { checkpointRef, fetchCheckpoint, listBackups, publishBranch, pushTempBra
 
 const repository = process.env.SMOKE_REPOSITORY ?? '';
 const token = process.env.SMOKE_TOKEN ?? '';
-if (!/^[\w.-]+\/autopatch-smoke-[\w.-]+$/.test(repository) || !token) throw new Error('set SMOKE_REPOSITORY to owner/autopatch-smoke-<name> and SMOKE_TOKEN');
-const root = await fs.mkdtemp(path.join(os.tmpdir(), 'autopatch-github-smoke-'));
+if (!/^[\w.-]+\/autofork-smoke-[\w.-]+$/.test(repository) || !token) throw new Error('set SMOKE_REPOSITORY to owner/autofork-smoke-<name> and SMOKE_TOKEN');
+const root = await fs.mkdtemp(path.join(os.tmpdir(), 'autofork-github-smoke-'));
 const url = `https://github.com/${repository}.git`;
 const id = `${Date.now()}`;
-const branch = `autopatch-smoke/${id}`;
-const temp = `autopatch/${id}-1`;
+const branch = `autofork-smoke/${id}`;
+const temp = `autofork/${id}-1`;
 const git = new Git(root).withConfig(authExtraHeader(token, url));
 try {
   await git.run(['init', '-q']);
@@ -22,8 +22,8 @@ try {
   const old = await git.revParse('HEAD');
   await git.run(['push', 'origin', `HEAD:refs/heads/${branch}`]);
   await fs.mkdir(path.join(root, '.github/workflows'), { recursive: true });
-  await fs.writeFile(path.join(root, '.github/workflows/autopatch-smoke.yml'), 'name: smoke\non: workflow_dispatch\njobs:\n  smoke:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n');
-  await git.run(['add', '--', '.github/workflows/autopatch-smoke.yml']);
+  await fs.writeFile(path.join(root, '.github/workflows/autofork-smoke.yml'), 'name: smoke\non: workflow_dispatch\njobs:\n  smoke:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n');
+  await git.run(['add', '--', '.github/workflows/autofork-smoke.yml']);
   await git.run(['commit', '-qm', 'smoke: workflows permission']);
   const head = await git.revParse('HEAD');
   const ctx = { git, branch, leaseSha: old, upstreamSha: old, checkpointSha: null, runId: id, dryRun: false, log: silentLogger };

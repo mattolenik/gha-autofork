@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { z } from 'zod';
 import type { Budget } from '../budget.js';
-import { AutopatchError } from '../errors.js';
+import { AutoforkError } from '../errors.js';
 import type { Logger } from '../log.js';
 import { SCHEMAS, toJsonSchema, type SchemaName } from '../schemas.js';
 import type { AgentBackend, AgentMode, AgentRunResult } from './types.js';
@@ -64,7 +64,7 @@ export class AgentRunner {
       this.o.log.warning(`${this.o.role} (${this.label}) returned output that does not match the ${call.schemaName} schema: ${lastError}`);
       user = `${call.user}\n\n## Correction\n\nYour previous answer did not match the required JSON schema: ${lastError}\nAnswer again with a single JSON object that matches the schema exactly.`;
     }
-    throw new AutopatchError('FAILED_AGENT', `${this.o.role} (${this.label}) failed to produce valid ${call.schemaName} output twice: ${lastError}`);
+    throw new AutoforkError('FAILED_AGENT', `${this.o.role} (${this.label}) failed to produce valid ${call.schemaName} output twice: ${lastError}`);
   }
 
   private async invoke(call: StructuredCall, user: string, jsonSchema: Record<string, unknown>, attempt: number): Promise<AgentRunResult> {
@@ -94,9 +94,9 @@ export class AgentRunner {
     } catch (err) {
       this.o.budget.record(null); // a killed/crashed CLI may have incurred unreported spend
       if (err instanceof AgentTimeoutError) {
-        throw new AutopatchError('FAILED_TIMEOUT', `${this.o.role} (${this.label}) ${err.message}`);
+        throw new AutoforkError('FAILED_TIMEOUT', `${this.o.role} (${this.label}) ${err.message}`);
       }
-      throw new AutopatchError('FAILED_AGENT', `${this.o.role} (${this.label}) crashed: ${err instanceof Error ? err.message : String(err)}`);
+      throw new AutoforkError('FAILED_AGENT', `${this.o.role} (${this.label}) crashed: ${err instanceof Error ? err.message : String(err)}`);
     }
     const seconds = ((Date.now() - started) / 1000).toFixed(1);
     this.o.log.info(
@@ -108,7 +108,7 @@ export class AgentRunner {
     }
     this.o.budget.record(result.costUsd);
     if (result.exitCode !== 0) {
-      throw new AutopatchError('FAILED_AGENT', `${this.o.role} (${this.label}) exited with code ${result.exitCode}: ${tail(result.raw, 2000)}`);
+      throw new AutoforkError('FAILED_AGENT', `${this.o.role} (${this.label}) exited with code ${result.exitCode}: ${tail(result.raw, 2000)}`);
     }
     return result;
   }

@@ -125,7 +125,7 @@ process.on('exit', () => {
 
 async function buildTemplate(opts: FixtureOptions): Promise<string> {
   const branch = opts.branch ?? 'main';
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'autopatch-template-'));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'autofork-template-'));
   templateRoots.push(root);
   const upstreamBare = path.join(root, 'upstream.git');
   const originBare = path.join(root, 'origin.git');
@@ -173,7 +173,7 @@ export async function createFixture(opts: FixtureOptions = {}): Promise<Fixture>
     templates.set(key, template);
   }
   const templateRoot = await template;
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'autopatch-fixture-'));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'autofork-fixture-'));
   await fs.cp(templateRoot, root, { recursive: true });
   const upstreamBare = path.join(root, 'upstream.git');
   const originBare = path.join(root, 'origin.git');

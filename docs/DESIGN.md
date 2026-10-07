@@ -132,7 +132,7 @@ project verification remains necessary. The `fake` backend is exclusively a test
 Automatic publication of a patch series requires independent review, verification, and an initialized upstream anchor.
 `publish` defaults to `auto`; staging is an explicit choice or the fallback when eligibility is missing.
 The first publication requires an explicit inspected `initial_base`; subsequent runs use
-`refs/autopatch/upstream/<branch>`. The anchor must be an ancestor of both fork and upstream. A rewritten
+`refs/autofork/upstream/<branch>`. The anchor must be an ancestor of both fork and upstream. A rewritten
 upstream fails planning instead of reclassifying deleted upstream commits as personal patches.
 An explicit first initialization may run even if upstream has not moved; like a patchless
 fast-forward it involves no agent judgement, so only gates and verification run. A genuinely patchless

@@ -1,4 +1,4 @@
-name: autopatch
+name: autofork
 
 on:
   workflow_call:
@@ -68,7 +68,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: autopatch-${{ inputs.repository || github.repository }}
+  group: autofork-${{ inputs.repository || github.repository }}
   cancel-in-progress: false
 
 jobs:
@@ -90,7 +90,7 @@ jobs:
           persist-credentials: false
       - run: sudo apt-get update && sudo apt-get install -y bubblewrap
       - id: prepare
-        uses: mattolenik/gha-autopatch@v1
+        uses: mattolenik/gha-autofork@v1
         with:
           phase: prepare
           repository: ${{ inputs.repository || github.repository }}
@@ -115,17 +115,17 @@ jobs:
         if: always() && steps.prepare.outputs.artifact_digest != ''
         uses: actions/upload-artifact@v6
         with:
-          name: autopatch-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          name: autofork-candidate-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.prepare.outputs.artifact_dir }}
           if-no-files-found: error
       - id: results
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: autopatch-prepare-results-${{ github.run_id }}-${{ github.run_attempt }}
+          name: autofork-prepare-results-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            ${{ steps.prepare.outputs.results_dir || format('{0}/autopatch/results', runner.temp) }}
-            !${{ steps.prepare.outputs.results_dir || format('{0}/autopatch/results', runner.temp) }}/candidate/**
+            ${{ steps.prepare.outputs.results_dir || format('{0}/autofork/results', runner.temp) }}
+            !${{ steps.prepare.outputs.results_dir || format('{0}/autofork/results', runner.temp) }}/candidate/**
           if-no-files-found: ignore
 
   verify:
@@ -146,7 +146,7 @@ jobs:
           merge-multiple: true
       - run: sudo apt-get update && sudo apt-get install -y bubblewrap
       - id: verify
-        uses: mattolenik/gha-autopatch@v1
+        uses: mattolenik/gha-autofork@v1
         with:
           phase: verify
           repository: ${{ inputs.repository || github.repository }}
@@ -160,15 +160,15 @@ jobs:
       - id: verification
         uses: actions/upload-artifact@v6
         with:
-          name: autopatch-verification-${{ github.run_id }}-${{ github.run_attempt }}
+          name: autofork-verification-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.verify.outputs.artifact_dir }}
           if-no-files-found: error
       - id: results
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: autopatch-verify-results-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ steps.verify.outputs.results_dir || format('{0}/autopatch-verify/results', runner.temp) }}
+          name: autofork-verify-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.verify.outputs.results_dir || format('{0}/autofork-verify/results', runner.temp) }}
           if-no-files-found: ignore
 
   publish:
@@ -191,7 +191,7 @@ jobs:
           path: ${{ runner.temp }}/verification-input
           merge-multiple: true
       - id: publish
-        uses: mattolenik/gha-autopatch@v1
+        uses: mattolenik/gha-autofork@v1
         with:
           phase: publish
           repository: ${{ inputs.repository || github.repository }}
@@ -209,7 +209,7 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: autopatch-publish-results-${{ github.run_id }}-${{ github.run_attempt }}
+          name: autofork-publish-results-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.publish.outputs.results_dir }}
           if-no-files-found: ignore
 
@@ -224,7 +224,7 @@ jobs:
           artifact-ids: ${{ needs.verify.outputs.results_id || needs.prepare.outputs.results_id }}
           path: ${{ runner.temp }}/failure-input
           merge-multiple: true
-      - uses: mattolenik/gha-autopatch@v1
+      - uses: mattolenik/gha-autofork@v1
         with:
           phase: report
           repository: ${{ inputs.repository || github.repository }}

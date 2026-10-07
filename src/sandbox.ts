@@ -17,7 +17,7 @@ export async function sandboxCommand(bin: string, args: string[], cwd: string, m
   const git = new Git(cwd);
   const common = await git.commonDir();
   const gitFile = path.join(cwd, '.git');
-  const home = '/tmp/autopatch-home';
+  const home = '/tmp/autofork-home';
   const sandboxArgs = ['--die-with-parent', '--new-session', '--unshare-user', '--unshare-pid', '--unshare-ipc', '--unshare-uts',
     '--cap-drop', 'ALL', '--ro-bind', '/', '/', '--proc', '/proc', '--dev', '/dev',
     '--tmpfs', '/tmp', '--tmpfs', '/run',

@@ -1,4 +1,4 @@
-import { AutopatchError } from './errors.js';
+import { AutoforkError } from './errors.js';
 
 /** Run-wide cost accounting across every agent call. */
 export class Budget {
@@ -10,7 +10,7 @@ export class Budget {
   constructor(readonly maxUsd: number) {}
 
   assertAvailable(): void {
-    if (this.spentUsd >= this.maxUsd) throw new AutopatchError('FAILED_BUDGET', `reported budget exhausted ($${this.spentUsd.toFixed(2)} of $${this.maxUsd.toFixed(2)})`);
+    if (this.spentUsd >= this.maxUsd) throw new AutoforkError('FAILED_BUDGET', `reported budget exhausted ($${this.spentUsd.toFixed(2)} of $${this.maxUsd.toFixed(2)})`);
   }
 
   record(costUsd: number | null): void {
@@ -19,10 +19,10 @@ export class Budget {
       this.unpricedCalls += 1;
       return;
     }
-    if (!Number.isFinite(costUsd) || costUsd < 0) throw new AutopatchError('FAILED_AGENT', 'backend returned an invalid cost');
+    if (!Number.isFinite(costUsd) || costUsd < 0) throw new AutoforkError('FAILED_AGENT', 'backend returned an invalid cost');
     this.spentUsd += costUsd;
     if (this.spentUsd > this.maxUsd) {
-      throw new AutopatchError(
+      throw new AutoforkError(
         'FAILED_BUDGET',
         `agent spend $${this.spentUsd.toFixed(2)} exceeded max_cost_usd=$${this.maxUsd.toFixed(2)} after ${this.calls} calls`,
       );

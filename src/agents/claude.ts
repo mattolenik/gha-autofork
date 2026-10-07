@@ -113,7 +113,7 @@ export class ClaudeBackend implements AgentBackend {
   }
 
   async run(prompt: string, opts: AgentRunOptions): Promise<AgentRunResult> {
-    const configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'autopatch-claude-'));
+    const configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'autofork-claude-'));
     try {
       const env: Record<string, string> = {
         ...opts.env,

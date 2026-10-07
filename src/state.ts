@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { AutopatchError } from './errors.js';
+import { AutoforkError } from './errors.js';
 import type { Git } from './git.js';
 
 export interface CandidateIdentity {
@@ -63,13 +63,13 @@ export async function guardGit<T>(git: Git, mode: 'edit' | 'readonly', label: st
     return await call();
   } finally {
     try {
-      if (await gitState(git) !== before) throw new AutopatchError('FAILED_TAMPERED', `${label} changed Git metadata or the index`);
+      if (await gitState(git) !== before) throw new AutoforkError('FAILED_TAMPERED', `${label} changed Git metadata or the index`);
       if (mode === 'readonly' && await worktreeState(git) !== beforeFiles) {
-        throw new AutopatchError('FAILED_TAMPERED', `${label} changed the worktree during a read-only operation`);
+        throw new AutoforkError('FAILED_TAMPERED', `${label} changed the worktree during a read-only operation`);
       }
     } catch (e) {
-      if (e instanceof AutopatchError) throw e;
-      throw new AutopatchError('FAILED_TAMPERED', `${label} left Git state unreadable`, [e instanceof Error ? e.message : String(e)]);
+      if (e instanceof AutoforkError) throw e;
+      throw new AutoforkError('FAILED_TAMPERED', `${label} left Git state unreadable`, [e instanceof Error ? e.message : String(e)]);
     }
   }
 }
@@ -77,14 +77,14 @@ export async function guardGit<T>(git: Git, mode: 'edit' | 'readonly', label: st
 export async function assertCandidate(git: Git, expected: CandidateIdentity): Promise<void> {
   const current = await candidateIdentity(git);
   if (current.headSha !== expected.headSha || current.treeSha !== expected.treeSha || (await git.statusPorcelain()).length) {
-    throw new AutopatchError('FAILED_TAMPERED', 'candidate changed after verification or approval');
+    throw new AutoforkError('FAILED_TAMPERED', 'candidate changed after verification or approval');
   }
 }
 
 /** Reject traversal, directories, and symlink ancestors; leaf symlinks are Git data. */
 export async function validateFilePath(root: string, rel: string): Promise<void> {
   if (!rel || path.isAbsolute(rel) || rel.includes('\0') || rel.split('/').some(p => !p || p === '.' || p === '..' || p.toLowerCase() === '.git')) {
-    throw new AutopatchError('FAILED_AGENT', `invalid file path: ${JSON.stringify(rel)}`);
+    throw new AutoforkError('FAILED_AGENT', `invalid file path: ${JSON.stringify(rel)}`);
   }
   const parts = rel.split('/');
   for (let i = 1; i <= parts.length; i++) {
@@ -93,7 +93,7 @@ export async function validateFilePath(root: string, rel: string): Promise<void>
       throw e;
     });
     if (st && (i < parts.length ? !st.isDirectory() : st.isDirectory())) {
-      throw new AutopatchError('FAILED_AGENT', `file path traverses a symlink or names a directory: ${JSON.stringify(rel)}`);
+      throw new AutoforkError('FAILED_AGENT', `file path traverses a symlink or names a directory: ${JSON.stringify(rel)}`);
     }
   }
 }

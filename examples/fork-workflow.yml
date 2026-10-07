@@ -1,5 +1,5 @@
 # Commit this as one of your fork's patches. Pin the reusable workflow to a reviewed release SHA.
-name: autopatch
+name: autofork
 on:
   schedule:
     - cron: '17 6 * * 1'
@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   sync:
-    uses: mattolenik/gha-autopatch/.github/workflows/autopatch.yml@v1
+    uses: mattolenik/gha-autofork/.github/workflows/autofork.yml@v1
     with:
       upstream: OWNER/REPO
       worker: claude:claude-opus-5-5
@@ -29,6 +29,6 @@ jobs:
       publish: auto
       dry_run: ${{ inputs.dry_run || false }}
     secrets:
-      token: ${{ secrets.AUTOPATCH_TOKEN }}
+      token: ${{ secrets.AUTOFORK_TOKEN }}
       anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
       openai_api_key: ${{ secrets.OPENAI_API_KEY }}

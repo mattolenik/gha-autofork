@@ -1,5 +1,5 @@
 {
-  "name": "gha-autopatch",
+  "name": "gha-autofork",
   "version": "0.1.0",
   "private": true,
   "description": "GitHub Action that rebases a personal fork onto upstream with AI agents resolving conflicts and reviewing each other",
