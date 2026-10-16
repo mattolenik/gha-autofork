@@ -1,5 +1,6 @@
 import { AutoforkError } from './errors.js';
 import type { Git } from './git.js';
+import { isNotesCommit } from './notes.js';
 
 export interface Patch {
   sha: string;
@@ -19,6 +20,10 @@ export interface RebasePlan {
   upstreamRef: string;
   /** Sha the fork branch pointed at when planning started; used as the push lease. */
   branchSha: string;
+  /** Tip of the code series: branchSha, or its parent when a generated fork notes commit sits on top. */
+  seriesSha: string;
+  /** Generated fork notes commit at the top of the branch, excluded from patches and regenerated after the rebase. */
+  notesSha: string | null;
   upstreamSha: string;
   base: string;
   patches: Patch[];
@@ -35,6 +40,8 @@ export interface NothingToDoPlan {
   branch: string;
   upstreamBranch: string;
   branchSha: string;
+  seriesSha: string;
+  notesSha: string | null;
   patches: Patch[];
 }
 
@@ -44,6 +51,8 @@ export interface FastForwardPlan {
   upstreamBranch: string;
   upstreamRef: string;
   branchSha: string;
+  seriesSha: string;
+  notesSha: string | null;
   upstreamSha: string;
 }
 
@@ -63,6 +72,8 @@ export interface PlanOptions {
   checkpointSha?: string | undefined;
   /** Explicit old upstream base for initialization when no checkpoint exists. */
   initialBase?: string | undefined;
+  /** Recognize a generated fork notes commit at the branch tip and leave it out of the series. */
+  forkNotes?: boolean;
 }
 
 export interface ResolveBranchesOptions {
@@ -163,7 +174,13 @@ export async function computePlan(git: Git, opts: PlanOptions): Promise<Plan> {
     );
   }
 
-  const rawPatches = await listPatches(git, base, branchSha);
+  let seriesSha = branchSha;
+  let notesSha: string | null = null;
+  if (opts.forkNotes && base !== branchSha && (await isNotesCommit(git, branchSha))) {
+    notesSha = branchSha;
+    seriesSha = await git.revParse(`${branchSha}^`);
+  }
+  const rawPatches = await listPatches(git, base, seriesSha);
   if (rawPatches.length > opts.maxPatches) {
     throw new AutoforkError(
       'FAILED_PLAN',
@@ -171,7 +188,7 @@ export async function computePlan(git: Git, opts: PlanOptions): Promise<Plan> {
     );
   }
 
-  const common = { branch: opts.branch, upstreamBranch: opts.upstreamBranch, branchSha };
+  const common = { branch: opts.branch, upstreamBranch: opts.upstreamBranch, branchSha, seriesSha, notesSha };
 
   if (rawPatches.length === 0) {
     if (upstreamSha === branchSha) {
@@ -184,7 +201,7 @@ export async function computePlan(git: Git, opts: PlanOptions): Promise<Plan> {
     return { kind: 'nothing_to_do', ...common, patches: rawPatches.map((p) => ({ ...p, absorbed: false })) };
   }
 
-  const absorbed = await absorbedPatches(git, upstreamSha, branchSha, base);
+  const absorbed = await absorbedPatches(git, upstreamSha, seriesSha, base);
   const patches: Patch[] = rawPatches.map((p) => ({ ...p, absorbed: absorbed.has(p.sha) }));
   const expectedSurvivors = patches.filter((p) => !p.absorbed).length;
   const upstreamCommits = await git.revListCount(`${base}..${upstreamSha}`);

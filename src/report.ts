@@ -148,7 +148,7 @@ export function renderSummary(r: RunReport, opts: { forIssue: boolean; runUrl?: 
         [
           `git fetch origin ${quote(r.tempBranch)} ${quote(branch)} ${quote(r.plan.branchSha)}`,
           `git checkout -b autofork-rescue ${quote(`origin/${r.tempBranch}`)}`,
-          `git range-diff ${r.plan.kind === 'rebase' ? `${quote(`${r.plan.base}..${r.plan.branchSha}`)} ${quote(`${r.plan.upstreamSha}..HEAD`)}` : ''}`,
+          `git range-diff ${r.plan.kind === 'rebase' ? `${quote(`${r.plan.base}..${r.plan.seriesSha}`)} ${quote(`${r.plan.upstreamSha}..HEAD`)}` : ''}`,
           '# fix things, then:',
           `git push ${quote(`--force-with-lease=${branch}:${r.plan.branchSha}`)} origin ${quote(`HEAD:${branch}`)}`,
           `git push origin --delete ${quote(r.tempBranch)}`,

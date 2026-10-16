@@ -51,7 +51,7 @@ export async function saveRecovery(git: Git, plan: RebasePlan, destination: stri
   const todo = (rebase['git-rebase-todo'] ?? '').split('\n').map(line => /^pick ([0-9a-f]+)/.exec(line)?.[1]).filter((s): s is string => !!s);
   const pending = Object.keys(rebase).length
     ? plan.patches.filter(p => p.sha === currentPatch || todo.some(ref => p.sha.startsWith(ref))).map(p => p.sha)
-    : head === plan.branchSha ? plan.patches.map(p => p.sha) : [];
+    : head === plan.seriesSha ? plan.patches.map(p => p.sha) : [];
   const content = { original: plan.branchSha, upstream: plan.upstreamSha, head, currentPatch, records, pending, index, rebase, files };
   const signature = createHash('sha256').update(JSON.stringify(content)).digest('hex');
   const previous = await fs.readFile(path.join(destination, 'recovery.json'), 'utf8').catch(() => 'null');

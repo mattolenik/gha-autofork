@@ -32,7 +32,7 @@ describe('bounded orchestration overhead', () => {
     const outcome = await h.run();
     const dir = path.join(fx.root, 'candidate');
     const digest = await writeCandidate(h.wt, dir, h.plan, outcome, { runId: '1', runAttempt: '1', repository: 'o/r', upstream: 'o/up',
-      checkpointSha: null, kind: 'rebase', autoEligible: true, verifyCommand: null, approval: 'approved' });
+      checkpointSha: null, kind: 'rebase', autoEligible: true, verifyCommand: null, approval: 'approved', notesSha: null });
     expect((await fs.stat(path.join(dir, 'candidate.bundle'))).size).toBeLessThan(64 * 1024);
     const imported = await importCandidate(dir, digest, path.join(fx.root, 'imported'), { source: fx.originBare });
     expect(await imported.git.tree()).toBe(await h.wt.tree());

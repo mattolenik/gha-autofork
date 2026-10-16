@@ -36,6 +36,9 @@ on:
       require_hard_limits:
         type: boolean
         default: false
+      fork_notes:
+        type: boolean
+        default: true
       claude_version:
         type: string
         default: '2.1.288'
@@ -106,6 +109,7 @@ jobs:
           max_rounds: ${{ inputs.max_rounds }}
           max_cost_usd: ${{ inputs.max_cost_usd }}
           require_hard_limits: ${{ inputs.require_hard_limits }}
+          fork_notes: ${{ inputs.fork_notes }}
           claude_version: ${{ inputs.claude_version }}
           codex_version: ${{ inputs.codex_version }}
           dry_run: ${{ inputs.dry_run }}

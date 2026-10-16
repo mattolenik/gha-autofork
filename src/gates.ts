@@ -38,6 +38,8 @@ export interface GateOptions {
   log: Logger;
   tailChars?: number;
   sandbox?: boolean;
+  /** Generated fork notes commit expected at the tip, above the patch series. */
+  notesSha?: string | null;
 }
 
 export async function runGates(o: GateOptions): Promise<GateResult> {
@@ -63,7 +65,12 @@ export async function runGates(o: GateOptions): Promise<GateResult> {
 
   if (!(await git.isAncestor(plan.upstreamSha, head))) failures.push(`HEAD does not descend from upstream ${plan.upstreamSha.slice(0, 12)}`);
 
-  const count = await git.revListCount(`${plan.upstreamSha}..${head}`);
+  let seriesHead = head;
+  if (o.notesSha) {
+    if (o.notesSha === head) seriesHead = await git.revParse(`${head}^`);
+    else failures.push(`fork notes commit ${o.notesSha.slice(0, 12)} is not the candidate tip`);
+  }
+  const count = await git.revListCount(`${plan.upstreamSha}..${seriesHead}`);
   if (count !== o.expectedCount) failures.push(`expected ${o.expectedCount} commits on top of upstream, found ${count}`);
 
   const changedFiles = await git.paths(['diff', '--name-only', '-z', plan.upstreamSha, head]);
@@ -82,8 +89,8 @@ export async function runGates(o: GateOptions): Promise<GateResult> {
     // Patches rewritten during conflict resolution can differ a lot from their originals; a high creation
     // factor makes range-diff pair them instead of showing a deletion and an addition.
     await git.run(count === 0 || plan.patches.length === 0
-      ? ['log', '--reverse', '--format=fuller', '-p', '--no-color', `${plan.base}..${plan.branchSha}`]
-      : ['range-diff', '--no-color', '--creation-factor=100', `${plan.base}..${plan.branchSha}`, `${plan.upstreamSha}..${head}`], {
+      ? ['log', '--reverse', '--format=fuller', '-p', '--no-color', `${plan.base}..${plan.seriesSha}`]
+      : ['range-diff', '--no-color', '--creation-factor=100', `${plan.base}..${plan.seriesSha}`, `${plan.upstreamSha}..${seriesHead}`], {
       allowFailure: true,
     })
   );

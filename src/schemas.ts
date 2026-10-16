@@ -103,13 +103,19 @@ export const respondReportSchema = z
   .strict();
 export type RespondReport = z.infer<typeof respondReportSchema>;
 
-export type SchemaName = 'resolve' | 'selfcheck' | 'review' | 'respond';
+export const notesSchema = z
+  .object({ entries: z.array(z.object({ subject: z.string(), summary: z.string(), readme: z.string().nullable() }).strict()) })
+  .strict();
+export type NotesReport = z.infer<typeof notesSchema>;
+
+export type SchemaName = 'resolve' | 'selfcheck' | 'review' | 'respond' | 'notes';
 
 export const SCHEMAS = {
   resolve: resolveReportSchema,
   selfcheck: selfCheckSchema,
   review: reviewVerdictSchema,
   respond: respondReportSchema,
+  notes: notesSchema,
 } as const;
 
 /** JSON Schema in the strict dialect: every property required, no additional properties. */

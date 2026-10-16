@@ -68,6 +68,8 @@ describe('renderSummary', () => {
       upstreamBranch: 'main',
       upstreamRef: 'refs/remotes/upstream/main',
       branchSha: 'a'.repeat(40),
+      seriesSha: 'a'.repeat(40),
+      notesSha: null,
       upstreamSha: 'b'.repeat(40),
       base: 'c'.repeat(40),
       patches: [{ sha: 'd'.repeat(40), subject: 'fork: thing', author: 'me', absorbed: false }],

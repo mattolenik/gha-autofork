@@ -36,6 +36,7 @@ function inputs(overrides: Partial<Inputs> = {}): Inputs {
     publish: 'auto',
     installClis: false,
     dryRun: false,
+    forkNotes: false,
     anthropicApiKey: undefined,
     openaiApiKey: undefined,
     forkRemoteUrl: fx.originBare,

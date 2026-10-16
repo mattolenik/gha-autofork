@@ -13,11 +13,12 @@ import { Git, repoUrl, authExtraHeader } from './git.js';
 import type { Inputs } from './inputs.js';
 import type { IssuesApi } from './issue.js';
 import type { Logger } from './log.js';
+import { agentSummarizer, updateForkNotes, type Summarizer } from './notes.js';
 import { computePlan, type RebasePlan } from './plan.js';
 import { fetchCheckpoint, tempBranchName } from './publish.js';
 import { runRebase, type PatchRecord, type RebaseOutcome } from './rebase.js';
 import { saveRecovery } from './recovery.js';
-import { assertCandidate } from './state.js';
+import { assertCandidate, guardGit } from './state.js';
 import { writeResults, type RunReport } from './report.js';
 import { makeWorker } from './worker.js';
 
@@ -142,8 +143,9 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
 
     // 3. Plan
     const checkpointSha = await fetchCheckpoint(git, branch);
+    const forkNotes = inputs.forkNotes ?? true;
     let planned = await computePlan(git, { branch, upstreamBranch, branchRev: `refs/remotes/origin/${branch}`, maxPatches: inputs.maxPatches,
-      checkpointSha, initialBase: inputs.initialBase });
+      checkpointSha, initialBase: inputs.initialBase, forkNotes });
     // Explicit initialization is useful even when upstream has not moved yet.
     if (planned.kind === 'nothing_to_do' && !checkpointSha && inputs.initialBase) {
       const upstreamSha = await git.revParse(`refs/remotes/upstream/${upstreamBranch}`);
@@ -156,8 +158,8 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
       report.headSha = planned.branchSha;
       return await finish('NOTHING_TO_DO', `upstream ${upstreamBranch} has not moved since the last rebase; ${planned.patches.length} patch(es) in place`);
     }
-    const plan: RebasePlan = planned.kind === 'rebase' ? planned : { ...planned, kind: 'rebase', base: planned.branchSha,
-      patches: [], expectedSurvivors: 0, upstreamCommits: await git.revListCount(`${planned.branchSha}..${planned.upstreamSha}`), workflowPaths: [] };
+    const plan: RebasePlan = planned.kind === 'rebase' ? planned : { ...planned, kind: 'rebase', base: planned.seriesSha,
+      patches: [], expectedSurvivors: 0, upstreamCommits: await git.revListCount(`${planned.seriesSha}..${planned.upstreamSha}`), workflowPaths: [] };
     workPlan = plan;
     const independent = !!inputs.reviewer && (inputs.reviewer.backend !== inputs.worker.backend || inputs.worker.backend === 'fake');
     // Nothing to replay (no patches, or upstream has not moved): git alone produces the result and no agent judgement is involved.
@@ -171,23 +173,35 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
     // 4. Worktree on the temporary branch
     report.tempBranch = tempBranchName(env.runId, env.runAttempt);
     // Agent-facing Git objects never carry transport credentials in their argv/environment.
-    wt = await new Git(git.cwd).worktreeAdd(wtDir, planned.kind === 'fast_forward' ? plan.upstreamSha : plan.branchSha);
+    // The series tip excludes any generated fork notes commit; notes are regenerated on top after approval.
+    wt = await new Git(git.cwd).worktreeAdd(wtDir, planned.kind === 'fast_forward' ? plan.upstreamSha : plan.seriesSha);
     await wt.run(['switch', '-q', '-C', report.tempBranch]);
 
     const timeoutMs = inputs.agentTimeoutMinutes * 60_000;
-    const exportCandidate = async (outcome: RebaseOutcome, approval: 'approved' | 'contested') => {
+    const exportCandidate = async (outcome: RebaseOutcome, approval: 'approved' | 'contested', notesSha: string | null = null) => {
       report.artifactDir = path.join(resultsDir, 'candidate');
       report.artifactDigest = await writeCandidate(wt!, report.artifactDir, plan, outcome, {
         runId: env.runId, runAttempt: env.runAttempt, repository: inputs.repository, upstream: inputs.upstream,
         checkpointSha: checkpointSha ?? null, kind: planned.kind === 'fast_forward' ? 'fast_forward' : 'rebase',
-        autoEligible: approval === 'approved' && autoEligible, verifyCommand: inputs.verifyCommand ?? null, approval,
+        autoEligible: approval === 'approved' && autoEligible, verifyCommand: inputs.verifyCommand ?? null, approval, notesSha,
       });
+    };
+    /** FORK.md and the README notice as one commit above the approved series. Verification covers it. */
+    const addForkNotes = async (outcome: RebaseOutcome, summarize: Summarizer | null = null) => {
+      if (!forkNotes || outcome.mapping.size === 0) return null;
+      if (plan.notesSha && plan.upstreamCommits === 0) {
+        // Nothing moved, so the existing notes commit is still accurate.
+        await wt!.run(['reset', '-q', '--hard', plan.branchSha]);
+        return plan.notesSha;
+      }
+      return updateForkNotes({ git: wt!, plan, survivors: [...outcome.mapping.values()], repository: inputs.repository,
+        upstream: inputs.upstream, serverUrl: env.serverUrl, log, summarize });
     };
     if (deterministic) {
       // Patchless: the result is upstream itself. No upstream movement: the result is the existing series, unchanged.
       const outcome: RebaseOutcome = plan.patches.length === 0
         ? { headSha: plan.upstreamSha, records: [], conflictsResolved: 0, mapping: new Map() }
-        : { headSha: plan.branchSha, conflictsResolved: 0, mapping: new Map(plan.patches.map((p) => [p.sha, p.sha])),
+        : { headSha: plan.seriesSha, conflictsResolved: 0, mapping: new Map(plan.patches.map((p) => [p.sha, p.sha])),
             records: plan.patches.map((p) => ({ sha: p.sha, subject: p.subject, result: 'applied', newSha: p.sha, conflicts: [], report: null, extraPaths: [] })) };
       const what = plan.patches.length === 0 ? 'patchless' : 'unchanged';
       report.outcome = outcome;
@@ -196,7 +210,9 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
         verifyTimeoutMs: timeoutMs, env: buildChildEnv(), log, sandbox: inputs.sandbox ?? false });
       if (!report.gates.ok) return await fail('FAILED_GATE', `${what} candidate failed verification`, report.gates.failures);
       await assertCandidate(wt, report.gates.candidate);
-      await exportCandidate(outcome, 'approved');
+      const notesSha = await addForkNotes(outcome);
+      report.headSha = notesSha ?? outcome.headSha;
+      await exportCandidate(outcome, 'approved', notesSha);
       return await finish('PREPARED', `${what} candidate passed deterministic gates; no agents needed`);
     }
 
@@ -287,9 +303,12 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
       return await fail(consensus.state === 'CONTESTED' ? 'FAILED_CONTESTED' : 'FAILED_GATE', consensus.reason, consensus.gates.failures);
     }
 
-    // 8. Export an immutable candidate. This process never publishes refs or issues.
+    // 8. Fork notes on top, then export an immutable candidate. This process never publishes refs or issues.
     await assertCandidate(wt, consensus.gates.candidate);
-    await exportCandidate(outcome, 'approved');
+    const summarize = agentSummarizer(worker, wtDir);
+    const notesSha = await addForkNotes(outcome, commits => guardGit(wt!, 'readonly', 'fork notes summary', () => summarize(commits)));
+    report.headSha = notesSha ?? consensus.headSha;
+    await exportCandidate(outcome, 'approved', notesSha);
     return await finish('PREPARED', `${consensus.reason}; immutable candidate exported for isolated verification`);
   } catch (err) {
     if (err instanceof AutoforkError) return await fail(err.state, err.message, err.details);

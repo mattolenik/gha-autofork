@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { ResolveReport, RespondReport, ReviewVerdict, SelfCheck } from '../schemas.js';
+import type { NotesReport, ResolveReport, RespondReport, ReviewVerdict, SelfCheck } from '../schemas.js';
 import type { AgentBackend, AgentRunOptions, AgentRunResult } from './types.js';
 
 /**
@@ -46,6 +46,8 @@ export interface FakeScript {
   selfcheck?: Partial<SelfCheck>[];
   review?: (Partial<ReviewVerdict> & { hook?: string })[];
   respond?: FakeRespondStep[];
+  /** Entries by subject; subjects without one get a scripted placeholder. */
+  notes?: Record<string, Partial<NotesReport['entries'][number]>>;
   invalidJson?: Partial<Record<string, number>>;
   costUsd?: number;
 }
@@ -113,6 +115,11 @@ export class FakeBackend implements AgentBackend {
           checked: { range_diff: true, verify_log: true, commands_run: [] },
           ...step,
         } satisfies ReviewVerdict;
+        break;
+      }
+      case 'notes': {
+        const subjects = (opts.meta.subjects ?? '').split('\n').filter(Boolean);
+        structured = { entries: subjects.map(subject => ({ subject, summary: `fake summary of ${subject}`, readme: `**${subject}.** scripted`, ...script.notes?.[subject] })) } satisfies NotesReport;
         break;
       }
       case 'respond': {

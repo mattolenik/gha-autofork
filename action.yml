@@ -28,6 +28,9 @@ inputs:
   sandbox:
     description: Require Linux bubblewrap isolation for agents and verification. Disable only for trusted local tests.
     default: 'true'
+  fork_notes:
+    description: Maintain FORK.md and a README fork notice as one generated commit above the patch series.
+    default: 'true'
   require_hard_limits:
     description: Reject backends without enforced turn and dollar limits (currently Codex).
     default: 'false'

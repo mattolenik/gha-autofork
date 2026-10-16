@@ -23,7 +23,10 @@ During a rebase the sides are swapped: **ours / HEAD** is new upstream plus patc
 markers add the old common base. The index, including stages 1/2/3, detects content, add/add,
 modify/delete and binary conflicts; marker scanning is only an additional check.
 
-Patch accounting is `count(upstream..candidate) = n - absorbed - became_empty - skipped`. These are
+Patch accounting is `count(upstream..candidate) = n - absorbed - became_empty - skipped`. A generated
+fork notes commit (FORK.md plus the README notice) sits above that count: it is dropped before the rebase
+and recreated from the rebased series afterwards, so it is never a conflict source and never part of the
+reviewed series. Summaries are carried over by subject; the worker writes new ones read-only. These are
 disjoint outcomes for original patches: `git cherry` identifies absorbed patch IDs, `--empty=stop`
 records patches that become empty, and worker-requested skips require an explicit reviewer decision.
 Never use `-X ours` or `-X theirs`, which can silently discard one side. Rerere is disabled until a
@@ -123,6 +126,7 @@ project verification remains necessary. The `fake` backend is exclusively a test
 | Missing independent review, verification, or initialization | Candidate may be prepared | Structural gates still apply | STAGED |
 | `publish=stage` | Same preparation | Same verification | Temporary ref only |
 | `dry_run=true` | Same preparation | Same verification | No remote ref or issue changes |
+| Fork notes enabled | Previous notes commit excluded from the series; regenerated and committed above the approved result | Verified as part of the candidate | Accounting requires the notes commit above the survivors, touching only FORK.md and the README |
 | Gate, agent, tampering, or consensus failure | FAILED_* + available recovery artifacts | skipped or FAILED_* | skipped |
 | Complete, gate-passing but contested candidate | FAILED_CONTESTED + candidate artifact | skipped | rescue branch only, regardless of publish=auto |
 | Candidate/verification provenance mismatch | — | FAILED_TAMPERED | FAILED_TAMPERED |

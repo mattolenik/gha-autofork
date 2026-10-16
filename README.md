@@ -127,6 +127,7 @@ jobs with trusted job outputs and immutable artifact IDs. Never give prepare/ver
 | `install_clis` | `true` | Install missing pinned CLIs |
 | `claude_version` / `codex_version` | `2.1.288` / `0.160.0` | Exact required CLI version; configurable, including with `install_clis: false` |
 | `sandbox` | `true` | Linux bubblewrap required; disable only for trusted local testing |
+| `fork_notes` | `true` | Maintain `FORK.md` and the README fork notice as one generated commit above the series |
 | `require_hard_limits` | `false` | Reject backends without turn/dollar enforcement |
 | `anthropic_api_key` / `openai_api_key` | empty | Provider API keys; prepare only |
 | `artifact_dir` / `candidate_digest` | empty | Candidate artifact and prepare-job manifest digest |
@@ -155,6 +156,24 @@ initialization candidates need no bundle. This keeps weekly artifacts proportion
 than the project's lifetime history. If the original tip becomes unavailable, provide a retained backup
 or existing clone for recovery. Network and bundle operations use the workflow job deadline; small Git
 commands retain a five-minute timeout.
+
+## Fork notes
+
+With `fork_notes` (default on) every published series ends in one generated commit, `docs: update fork notes`,
+that touches only `FORK.md` and the README. `FORK.md` has one section per fork commit, oldest first, with the
+short SHA, subject, and a paragraph taken from the commit body or, when the body is empty, written by the
+worker from the diff in one read-only call. The README gets a blockquote fork notice directly under its H1,
+between `<!-- autofork:fork-notice:start -->` and `end` markers, with one bullet per user-visible change
+(CI, docs, refactor, test, build, chore and style commits are listed in `FORK.md` only) and a link to `FORK.md`.
+
+The previous notes commit is recognized by its subject and paths and left out of the rebase, so it never
+conflicts with upstream README edits; the files are regenerated from the rebased series and committed on
+top. Existing section text is carried over by commit subject, so you can edit a paragraph by hand and it
+survives the next rebase; patches absorbed upstream drop out. A hand-written `## Workflow` section at the
+end of `FORK.md` is preserved verbatim between `<!-- autofork:workflow:start -->` and `end` markers.
+A fork that already carries a hand-written `FORK.md` is adopted the same way on the first run. Verification
+runs on the candidate including the notes commit, and the publish job checks that the notes commit sits
+above the accounted series and touches only those files.
 
 ## Agent isolation and limits
 

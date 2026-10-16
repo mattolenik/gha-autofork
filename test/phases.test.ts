@@ -18,7 +18,7 @@ function inputs(overrides: Partial<Inputs> = {}): Inputs {
   return { phase: 'prepare', repository: 'owner/fork', upstream: fx.upstreamBare, token: 'dummy', branch: 'main', upstreamBranch: 'main',
     worker: { backend: 'fake', model: '' }, reviewer: { backend: 'fake', model: '' }, initialBase: fx.base,
     maxRounds: 1, maxPatches: 200, maxCostUsd: 10, maxTurns: 10, agentTimeoutMinutes: 1, keepBackups: 10,
-    verifyCommand: 'true', publish: 'auto', installClis: false, dryRun: false, sandbox: false,
+    verifyCommand: 'true', publish: 'auto', installClis: false, dryRun: false, sandbox: false, forkNotes: false,
     forkRemoteUrl: fx.originBare, anthropicApiKey: undefined, openaiApiKey: undefined, fakeScript: undefined, ...overrides };
 }
 function env(): RunEnv { return { workspace: fx.fork.cwd, runnerTemp: path.join(fx.root, 'runner'), runId: '123', runAttempt: '1', serverUrl: 'https://github.com' }; }
