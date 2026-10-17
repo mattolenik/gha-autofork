@@ -14,7 +14,7 @@ it.skipIf(process.platform !== 'linux')('isolates Git metadata, readonly files, 
   const worktree = path.join(fx.root, 'wt');
   await fx.fork.worktreeAdd(worktree, 'HEAD');
   const common = await fx.fork.commonDir();
-  const script = `test ! -e /proc/${process.pid}/environ && git rev-parse HEAD >/dev/null && ! echo corrupt > '${common}/config' && ! echo corrupt > .git && echo ok > permitted.txt`;
+  const script = `test ! -e /proc/${process.pid}/environ && git rev-parse HEAD >/dev/null && ! echo corrupt > '${common}/config' && ! echo corrupt > .git && echo ok > /var/tmp/scratch && echo ok > permitted.txt`;
   const launch = await sandboxCommand('sh', ['-c', script], worktree, 'edit', buildChildEnv());
   const result = await spawnCollect(launch.bin, launch.args, { cwd: worktree, env: launch.env, timeoutMs: 10000, backendName: 'sandbox-test' });
   expect(result.code, result.stderr).toBe(0);

@@ -181,8 +181,10 @@ Linux hosted runners need `bubblewrap`, and Ubuntu 24.04 images also need
 `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` so bubblewrap can create its user
 namespace (the reusable workflow does both; copy both lines into a pinned phase workflow). Agent processes have a
 separate process namespace, hidden runner home/IPC directories, read-only Git metadata, and only their
-worktree and disposable CLI state writable. Reviewer worktrees are mounted read-only. Verification
-uses a separate sandbox with no provider key. CLI repository-instruction discovery is disabled;
+worktree, `/tmp`, `/var/tmp`, and disposable CLI state writable. Reviewer worktrees are mounted
+read-only. Verification uses a separate sandbox with no provider key. Nothing under the runner's home
+is visible, including preinstalled toolchains such as rustup under `~/.cargo`; a verify command
+needing them must install into the worktree or another writable path, or point at a system install. CLI repository-instruction discovery is disabled;
 conflict-time quarantine preserves explicitly conflicted instruction files. These files remain
 available as untrusted data during review.
 

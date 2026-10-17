@@ -45063,6 +45063,8 @@ async function sandboxCommand(bin, args, cwd, mode, env, writable = []) {
     "--tmpfs",
     "/tmp",
     "--tmpfs",
+    "/var/tmp",
+    "--tmpfs",
     "/run",
     // Ubuntu's /etc/resolv.conf commonly points into this otherwise-hidden directory.
     "--ro-bind-try",

@@ -20,7 +20,7 @@ export async function sandboxCommand(bin: string, args: string[], cwd: string, m
   const home = '/tmp/autofork-home';
   const sandboxArgs = ['--die-with-parent', '--new-session', '--unshare-user', '--unshare-pid', '--unshare-ipc', '--unshare-uts',
     '--cap-drop', 'ALL', '--ro-bind', '/', '/', '--proc', '/proc', '--dev', '/dev',
-    '--tmpfs', '/tmp', '--tmpfs', '/run',
+    '--tmpfs', '/tmp', '--tmpfs', '/var/tmp', '--tmpfs', '/run',
     // Ubuntu's /etc/resolv.conf commonly points into this otherwise-hidden directory.
     '--ro-bind-try', '/run/systemd/resolve', '/run/systemd/resolve',
     '--tmpfs', '/home', '--tmpfs', '/root',
