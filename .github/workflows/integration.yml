@@ -30,7 +30,9 @@ jobs:
         with:
           node-version: 24
       - run: npm ci
-      - run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: npx tsx scripts/cli-smoke.ts
         env:
           LIVE_MODELS: ${{ inputs.live_models }}

@@ -177,7 +177,9 @@ above the accounted series and touches only those files.
 
 ## Agent isolation and limits
 
-Linux hosted runners need `bubblewrap` (installed by the reusable workflow). Agent processes have a
+Linux hosted runners need `bubblewrap`, and Ubuntu 24.04 images also need
+`sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` so bubblewrap can create its user
+namespace (the reusable workflow does both; copy both lines into a pinned phase workflow). Agent processes have a
 separate process namespace, hidden runner home/IPC directories, read-only Git metadata, and only their
 worktree and disposable CLI state writable. Reviewer worktrees are mounted read-only. Verification
 uses a separate sandbox with no provider key. CLI repository-instruction discovery is disabled;

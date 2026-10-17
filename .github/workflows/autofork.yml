@@ -91,7 +91,9 @@ jobs:
           token: ${{ secrets.read_token || github.token }}
           fetch-depth: 0
           persist-credentials: false
-      - run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - id: prepare
         uses: mattolenik/gha-autofork@v1
         with:
@@ -148,7 +150,9 @@ jobs:
           artifact-ids: ${{ needs.prepare.outputs.artifact_id }}
           path: ${{ runner.temp }}/candidate-input
           merge-multiple: true
-      - run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - id: verify
         uses: mattolenik/gha-autofork@v1
         with:
