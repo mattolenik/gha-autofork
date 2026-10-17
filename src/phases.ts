@@ -72,7 +72,9 @@ export async function runPhase(inputs: Inputs, env: RunEnv, deps: RunDeps): Prom
 
     if (phase === 'verify') {
       const gates = await runGates({ git, plan, expectedCount: report.outcome.mapping.size, notesSha: candidate.notesSha, verifyCommand: inputs.verifyCommand,
-        verifyTimeoutMs: inputs.agentTimeoutMinutes * 60_000, env: buildChildEnv(), log, sandbox: inputs.sandbox ?? false });
+        verifyTimeoutMs: inputs.agentTimeoutMinutes * 60_000, env: buildChildEnv(), log,
+        // This job holds no provider keys and a read-only token, so unsandboxed verification is the accepted exposure.
+        sandbox: inputs.verifySandbox === false ? false : inputs.sandbox ?? false });
       report.gates = gates;
       if (!gates.ok) throw new AutoforkError('FAILED_GATE', 'isolated verification failed', gates.failures);
       await assertCandidate(git, candidate);

@@ -127,6 +127,7 @@ jobs with trusted job outputs and immutable artifact IDs. Never give prepare/ver
 | `install_clis` | `true` | Install missing pinned CLIs |
 | `claude_version` / `codex_version` | `2.1.288` / `0.160.0` | Exact required CLI version; configurable, including with `install_clis: false` |
 | `sandbox` | `true` | Linux bubblewrap required; disable only for trusted local testing |
+| `verify_sandbox` | `true` | Run `verify_command` sandboxed; `false` moves it entirely to the verify job, unsandboxed |
 | `fork_notes` | `true` | Maintain `FORK.md` and the README fork notice as one generated commit above the series |
 | `require_hard_limits` | `false` | Reject backends without turn/dollar enforcement |
 | `anthropic_api_key` / `openai_api_key` | empty | Provider API keys; prepare only |
@@ -184,7 +185,16 @@ separate process namespace, hidden runner home/IPC directories, read-only Git me
 worktree, `/tmp`, `/var/tmp`, and disposable CLI state writable. Reviewer worktrees are mounted
 read-only. Verification uses a separate sandbox with no provider key. Nothing under the runner's home
 is visible, including preinstalled toolchains such as rustup under `~/.cargo`; a verify command
-needing them must install into the worktree or another writable path, or point at a system install. CLI repository-instruction discovery is disabled;
+needing them must install into the worktree or another writable path, or point at a system install.
+
+Some test suites cannot run in a single-uid user namespace: PTY handoff across a private pid
+namespace, sticky-bit checks on `/tmp`, or POSIX ACLs naming other uids. For those, set
+`verify_sandbox: false`. Prepare then runs only the deterministic gates, so the worker gets no verify
+feedback and a test failure ends the run in the verify job with no agent retry. The verify job runs
+`verify_command` unsandboxed on its own ephemeral runner, which holds no provider keys and only
+`read_token` or the read-scoped `GITHUB_TOKEN`. The exposure is that agent-edited or upstream code can
+read that token for the job's lifetime, so on public forks leave `read_token` unset, and on private
+forks scope it to read access only. CLI repository-instruction discovery is disabled;
 conflict-time quarantine preserves explicitly conflicted instruction files. These files remain
 available as untrusted data during review.
 

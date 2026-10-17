@@ -39,6 +39,10 @@ on:
       fork_notes:
         type: boolean
         default: true
+      verify_sandbox:
+        description: Run verify_command sandboxed. False moves it entirely to the verify job, unsandboxed.
+        type: boolean
+        default: true
       claude_version:
         type: string
         default: '2.1.288'
@@ -112,6 +116,7 @@ jobs:
           max_cost_usd: ${{ inputs.max_cost_usd }}
           require_hard_limits: ${{ inputs.require_hard_limits }}
           fork_notes: ${{ inputs.fork_notes }}
+          verify_sandbox: ${{ inputs.verify_sandbox }}
           claude_version: ${{ inputs.claude_version }}
           codex_version: ${{ inputs.codex_version }}
           dry_run: ${{ inputs.dry_run }}
@@ -165,6 +170,7 @@ jobs:
           artifact_dir: ${{ runner.temp }}/candidate-input
           candidate_digest: ${{ needs.prepare.outputs.digest }}
           verify_command: ${{ inputs.verify_command }}
+          verify_sandbox: ${{ inputs.verify_sandbox }}
       - id: verification
         uses: actions/upload-artifact@v6
         with:

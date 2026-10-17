@@ -178,6 +178,9 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
     await wt.run(['switch', '-q', '-C', report.tempBranch]);
 
     const timeoutMs = inputs.agentTimeoutMinutes * 60_000;
+    // Unsandboxed verification may only run in the verify job; this process holds provider keys.
+    const prepareVerify = inputs.verifySandbox === false ? undefined : inputs.verifyCommand;
+    if (inputs.verifyCommand && !prepareVerify) log.info('verify_sandbox=false: the verify command runs only in the verify job');
     const exportCandidate = async (outcome: RebaseOutcome, approval: 'approved' | 'contested', notesSha: string | null = null) => {
       report.artifactDir = path.join(resultsDir, 'candidate');
       report.artifactDigest = await writeCandidate(wt!, report.artifactDir, plan, outcome, {
@@ -206,7 +209,7 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
       const what = plan.patches.length === 0 ? 'patchless' : 'unchanged';
       report.outcome = outcome;
       report.headSha = outcome.headSha;
-      report.gates = await runGates({ git: wt, plan, expectedCount: outcome.mapping.size, verifyCommand: inputs.verifyCommand,
+      report.gates = await runGates({ git: wt, plan, expectedCount: outcome.mapping.size, verifyCommand: prepareVerify,
         verifyTimeoutMs: timeoutMs, env: buildChildEnv(), log, sandbox: inputs.sandbox ?? false });
       if (!report.gates.ok) return await fail('FAILED_GATE', `${what} candidate failed verification`, report.gates.failures);
       await assertCandidate(wt, report.gates.candidate);
@@ -269,7 +272,7 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
         git: wt!,
         plan,
         expectedCount: outcome.mapping.size,
-        verifyCommand: inputs.verifyCommand,
+        verifyCommand: prepareVerify,
         verifyTimeoutMs: timeoutMs,
         env: buildChildEnv(),
         log,

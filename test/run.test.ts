@@ -149,6 +149,15 @@ describe('run (end to end with the fake backend)', () => {
     expect(await originRef(`refs/heads/${fx.branch}`)).toBe(fx.base);
   });
 
+  it('leaves the verify command to the verify job when verify_sandbox is off', async () => {
+    fx = await createFixture();
+    await advanceUpstream(fx, { 'x.txt': 'x\n' }, 'upstream: x');
+    expect((await go({}, { verifyCommand: 'false' })).report.state).toBe('FAILED_GATE');
+    const { report } = await go({}, { verifyCommand: 'false', verifySandbox: false });
+    expect(report.state).toBe('PREPARED');
+    expect(report.gates?.verify).toBeNull();
+  });
+
   it('fails before any agent work on a non-linear fork', async () => {
     fx = await createFixture();
     await addMergeCommitToFork(fx);

@@ -28,6 +28,12 @@ inputs:
   sandbox:
     description: Require Linux bubblewrap isolation for agents and verification. Disable only for trusted local tests.
     default: 'true'
+  verify_sandbox:
+    description: >-
+      Run verify_command inside the sandbox. When false, prepare runs only the deterministic gates and the
+      isolated verify job runs verify_command unsandboxed with its read-only token; for test suites that need
+      a real pid namespace, /tmp ownership, or multiple uids.
+    default: 'true'
   fork_notes:
     description: Maintain FORK.md and a README fork notice as one generated commit above the patch series.
     default: 'true'

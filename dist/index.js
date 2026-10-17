@@ -44271,6 +44271,7 @@ var inputsSchema = external_exports.object({
   upstreamToken: optionalString.optional(),
   initialBase: optionalString.optional(),
   sandbox: boolString.optional(),
+  verifySandbox: boolString.optional(),
   forkNotes: boolString.optional(),
   requireHardLimits: boolString.optional(),
   resultsDigest: optionalString.optional(),
@@ -44308,6 +44309,7 @@ var INPUT_NAMES = {
   upstreamToken: "upstream_token",
   initialBase: "initial_base",
   sandbox: "sandbox",
+  verifySandbox: "verify_sandbox",
   forkNotes: "fork_notes",
   requireHardLimits: "require_hard_limits",
   resultsDigest: "results_digest",
@@ -47489,6 +47491,8 @@ async function run(inputs, env, deps) {
     wt = await new Git(git.cwd).worktreeAdd(wtDir, planned.kind === "fast_forward" ? plan.upstreamSha : plan.seriesSha);
     await wt.run(["switch", "-q", "-C", report.tempBranch]);
     const timeoutMs = inputs.agentTimeoutMinutes * 6e4;
+    const prepareVerify = inputs.verifySandbox === false ? void 0 : inputs.verifyCommand;
+    if (inputs.verifyCommand && !prepareVerify) log.info("verify_sandbox=false: the verify command runs only in the verify job");
     const exportCandidate = async (outcome2, approval, notesSha2 = null) => {
       report.artifactDir = path15.join(resultsDir, "candidate");
       report.artifactDigest = await writeCandidate(wt, report.artifactDir, plan, outcome2, {
@@ -47535,7 +47539,7 @@ async function run(inputs, env, deps) {
         git: wt,
         plan,
         expectedCount: outcome2.mapping.size,
-        verifyCommand: inputs.verifyCommand,
+        verifyCommand: prepareVerify,
         verifyTimeoutMs: timeoutMs,
         env: buildChildEnv(),
         log,
@@ -47595,7 +47599,7 @@ async function run(inputs, env, deps) {
       git: wt,
       plan,
       expectedCount: outcome.mapping.size,
-      verifyCommand: inputs.verifyCommand,
+      verifyCommand: prepareVerify,
       verifyTimeoutMs: timeoutMs,
       env: buildChildEnv(),
       log,
@@ -47803,7 +47807,8 @@ async function runPhase(inputs, env, deps) {
         verifyTimeoutMs: inputs.agentTimeoutMinutes * 6e4,
         env: buildChildEnv(),
         log,
-        sandbox: inputs.sandbox ?? false
+        // This job holds no provider keys and a read-only token, so unsandboxed verification is the accepted exposure.
+        sandbox: inputs.verifySandbox === false ? false : inputs.sandbox ?? false
       });
       report.gates = gates;
       if (!gates.ok) throw new AutoforkError("FAILED_GATE", "isolated verification failed", gates.failures);

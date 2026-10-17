@@ -51,7 +51,10 @@ reviewer cannot. The orchestrator and its artifacts live outside writable sandbo
 The CLI itself needs provider networking. Codex restricts its tool sandbox's network; Claude limits
 tools. Environment scrubbing, instruction-discovery suppression, and conflict-time quarantine are
 additional defenses. A prompt, a command-name allowlist, or a Git fingerprint alone is not an OS
-security boundary. `sandbox=false` is for trusted local testing.
+security boundary. `sandbox=false` is for trusted local testing. `verify_sandbox=false` is the one
+production opt-out: the verify command is dropped from prepare, whose process environment holds
+provider keys, and runs unsandboxed only in the verify job, which holds a read-only token and nothing
+else.
 
 ## Candidate identity and provenance
 

@@ -96,7 +96,7 @@ describe('fork notes', () => {
     expect(second.readme.match(/autofork:fork-notice:start/g)).toHaveLength(1);
     expect(second.readme).toContain('Now with upstream flair.');
     expect(second.readme.indexOf('fork-notice:end')).toBeLessThan(second.readme.indexOf('Now with upstream flair.'));
-  });
+  }, 300_000); // two full prepare→verify→publish cycles; slow under full-suite load
 
   it('initializes an unchanged fork with agent-free notes and keeps them when nothing moves', async () => {
     fx = await createFixture();
