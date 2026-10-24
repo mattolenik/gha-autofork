@@ -161,7 +161,8 @@ export async function run(inputs: Inputs, env: RunEnv, deps: RunDeps): Promise<R
     const plan: RebasePlan = planned.kind === 'rebase' ? planned : { ...planned, kind: 'rebase', base: planned.seriesSha,
       patches: [], expectedSurvivors: 0, upstreamCommits: await git.revListCount(`${planned.seriesSha}..${planned.upstreamSha}`), workflowPaths: [] };
     workPlan = plan;
-    const independent = !!inputs.reviewer && (inputs.reviewer.backend !== inputs.worker.backend || inputs.worker.backend === 'fake');
+    // A reviewer is a separate process in its own read-only worktree; the default pairs two DeepSeek-backed instances.
+    const independent = !!inputs.reviewer;
     // Nothing to replay (no patches, or upstream has not moved): git alone produces the result and no agent judgement is involved.
     const deterministic = plan.patches.length === 0 || plan.upstreamCommits === 0;
     const autoEligible = (independent || deterministic) && !!inputs.verifyCommand && !!(checkpointSha || inputs.initialBase);

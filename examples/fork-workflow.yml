@@ -22,13 +22,11 @@ jobs:
     uses: mattolenik/gha-autofork/.github/workflows/autofork.yml@v1
     with:
       upstream: OWNER/REPO
-      worker: claude:claude-opus-5-5
-      reviewer: codex:gpt-6.1-sol
+      # Both roles default to Claude Code against the DeepSeek API; set worker/reviewer to override.
       verify_command: npm ci && npm test
       initial_base: ${{ inputs.initial_base || '' }}
       publish: auto
       dry_run: ${{ inputs.dry_run || false }}
     secrets:
       token: ${{ secrets.AUTOFORK_TOKEN }}
-      anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-      openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+      deepseek_api_key: ${{ secrets.DEEPSEEK_API_KEY }}

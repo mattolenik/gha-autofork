@@ -11,7 +11,8 @@ The supported automatic-publishing entrypoint is the
 1. Enable Actions on your fork and allow the publishing actor to force-push the maintained branch.
 2. Create `AUTOFORK_TOKEN`: a PAT or App installation token scoped to the fork with Contents,
    Workflows, and Issues write. This credential is passed only to publishing and failure reporting.
-3. Add `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` for the providers you select.
+3. Add `DEEPSEEK_API_KEY`. Both agents default to Claude Code running against the DeepSeek API; add
+   `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` only if you select the `claude` or `codex` backends instead.
 4. Commit [examples/fork-workflow.yml](examples/fork-workflow.yml) as a fork patch. Set upstream, models,
    and a meaningful `verify_command`. Callers can pin the reusable workflow itself to a reviewed SHA.
    Its inner action currently uses `mattolenik/gha-autofork@v1`, selected by this repository; pinning the
@@ -32,15 +33,12 @@ jobs:
     uses: mattolenik/gha-autofork/.github/workflows/autofork.yml@v1
     with:
       upstream: OWNER/REPO
-      worker: claude:claude-opus-5-5
-      reviewer: codex:gpt-6.1-sol
       verify_command: npm ci && npm test
       publish: auto
       # First publication only: initial_base: <inspected merge-base SHA>
     secrets:
       token: ${{ secrets.AUTOFORK_TOKEN }}
-      anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-      openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+      deepseek_api_key: ${{ secrets.DEEPSEEK_API_KEY }}
 ```
 
 The maintained repository defaults to the caller. To drive another fork, set `repository` and supply a
@@ -73,7 +71,8 @@ outputs such as dependencies are permitted. Any candidate change invalidates its
 
 Automatic publication requires all of:
 
-- an independent reviewer for a fork with patches (different backend from the worker);
+- a configured reviewer for a fork with patches (a separate agent process; by default a second
+  DeepSeek-backed Claude Code instance, optionally a different provider);
 - a configured, passing verification command;
 - an existing upstream checkpoint or an explicit `initial_base`;
 - structurally and semantically valid consensus, with no major/blocker issues and every worker skip
@@ -114,7 +113,7 @@ jobs with trusted job outputs and immutable artifact IDs. Never give prepare/ver
 | `token` | required | Read credential in prepare/verify; write credential in publish/report |
 | `upstream_token` | empty | Separate read credential for a private upstream |
 | `initial_base` | empty | Explicit first-run merge-base SHA |
-| `worker` / `reviewer` | worker required for prepare | `claude:model` or `codex:model`; reviewer optional |
+| `worker` / `reviewer` | `deepseek:deepseek-flash[1m]` | `deepseek:model`, `claude:model`, or `codex:model`; reviewer `none` disables review |
 | `verify_command` | empty | Verification command from trusted workflow configuration |
 | `publish` | `auto` | `auto` or `stage`; missing checks cause staging |
 | `dry_run` | `false` | Do not update remote refs or issues |
@@ -130,7 +129,7 @@ jobs with trusted job outputs and immutable artifact IDs. Never give prepare/ver
 | `verify_sandbox` | `true` | Run `verify_command` sandboxed; `false` moves it entirely to the verify job, unsandboxed |
 | `fork_notes` | `true` | Maintain `FORK.md` and the README fork notice as one generated commit above the series |
 | `require_hard_limits` | `false` | Reject backends without turn/dollar enforcement |
-| `anthropic_api_key` / `openai_api_key` | empty | Provider API keys; prepare only |
+| `deepseek_api_key` / `anthropic_api_key` / `openai_api_key` | empty | Provider API keys; prepare only. `deepseek_api_key` falls back to `DEEPSEEK_API_KEY` in the environment |
 | `artifact_dir` / `candidate_digest` | empty | Candidate artifact and prepare-job manifest digest |
 | `verification_dir` / `verification_digest` | empty | Verification artifact and verify-job digest |
 | `results_digest` | empty | Failed-job results digest for the report phase |
@@ -221,9 +220,18 @@ verify command needs. Bubblewrap preserves systemd-resolved's directory under `/
 
 ## Models and real-CLI validation
 
+The default for both roles is `deepseek:deepseek-flash[1m]`: the pinned Claude Code CLI with
+`ANTHROPIC_BASE_URL` pointed at `https://api.deepseek.com/anthropic` and `DEEPSEEK_API_KEY` passed as
+`ANTHROPIC_AUTH_TOKEN`, following [DeepSeek's Claude Code guide](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code).
+`deepseek:deepseek-v4-pro` selects the stronger model. Worker and reviewer are separate processes with
+separate worktrees but share one provider; cross-provider review is available by choosing different
+backends, not the default. Dollar figures for the `deepseek` backend come from Claude Code's own
+pricing table for the model name, not DeepSeek billing, so treat `max_cost_usd` as approximate there and
+rely on `max_turns` and the wall-clock limit.
+
 Any model ID accepted by the configured CLI can be selected as `backend:model`. Examples are
 `claude:claude-opus-5-5` and `codex:gpt-6.1-sol`; check each provider/CLI for current available IDs and
-pricing. Select different providers for independent review. Models and CLI versions are separate inputs.
+pricing. Models and CLI versions are separate inputs.
 
 The original adapters' argument parsing was checked against Claude Code 2.1.288 and Codex 0.160.0.
 Codex did not recognize `model_instructions`, so its instructions are prepended to the task prompt while

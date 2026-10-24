@@ -44218,7 +44218,8 @@ function date4(params) {
 }
 
 // src/inputs.ts
-var BACKENDS = ["claude", "codex", "fake"];
+var BACKENDS = ["deepseek", "claude", "codex", "fake"];
+var DEFAULT_AGENT = "deepseek:deepseek-flash[1m]";
 var agentSpecSchema = external_exports.string().trim().transform((raw, ctx) => {
   const idx = raw.indexOf(":");
   const backend = (idx === -1 ? raw : raw.slice(0, idx)).trim();
@@ -44248,7 +44249,7 @@ var inputsSchema = external_exports.object({
   repository: external_exports.string().trim().regex(/^[^/\s]+\/[^/\s]+$/, "repository must be owner/repo"),
   token: external_exports.string().min(1, "token is required"),
   worker: agentSpecSchema,
-  reviewer: external_exports.string().trim().transform((s) => s === "" ? void 0 : s).pipe(agentSpecSchema.optional()),
+  reviewer: external_exports.string().trim().transform((s) => s === "" || s === "none" ? void 0 : s).pipe(agentSpecSchema.optional()),
   maxRounds: intString(1),
   verifyCommand: optionalString,
   maxPatches: intString(1),
@@ -44259,6 +44260,7 @@ var inputsSchema = external_exports.object({
   publish: external_exports.enum(["auto", "stage"]),
   installClis: boolString,
   dryRun: boolString,
+  deepseekApiKey: optionalString.optional(),
   anthropicApiKey: optionalString,
   openaiApiKey: optionalString,
   forkRemoteUrl: optionalString,
@@ -44297,6 +44299,7 @@ var INPUT_NAMES = {
   publish: "publish",
   installClis: "install_clis",
   dryRun: "dry_run",
+  deepseekApiKey: "deepseek_api_key",
   anthropicApiKey: "anthropic_api_key",
   openaiApiKey: "openai_api_key",
   forkRemoteUrl: "fork_remote_url",
@@ -44323,7 +44326,7 @@ function readRawInputs() {
     out[key] = getInput(INPUT_NAMES[key]);
   }
   if (!out.phase) out.phase = "prepare";
-  if (out.phase !== "prepare" && !out.worker) out.worker = "fake";
+  if (!out.worker) out.worker = out.phase === "prepare" ? DEFAULT_AGENT : "fake";
   return out;
 }
 function parseInputs(raw) {
@@ -44337,13 +44340,7 @@ function parseInputs(raw) {
     throw new Error(`invalid inputs:
 ${lines.join("\n")}`);
   }
-  const inputs = result.data;
-  if (inputs.reviewer && inputs.reviewer.backend === inputs.worker.backend && inputs.worker.backend !== "fake") {
-    warning(
-      `worker and reviewer both use the "${inputs.worker.backend}" backend; a different provider gives a more independent review`
-    );
-  }
-  return inputs;
+  return result.data;
 }
 
 // src/log.ts
@@ -45110,10 +45107,11 @@ var CLAUDE_VERSION = "2.1.288";
 var ClaudeBackend = class {
   constructor(o) {
     this.o = o;
+    this.name = o.name ?? "claude";
     this.bin = o.bin ?? "claude";
   }
   o;
-  name = "claude";
+  name;
   capabilities = { turnLimit: true, budgetLimit: true, costReporting: true };
   version;
   bin;
@@ -45196,7 +45194,9 @@ var ClaudeBackend = class {
         DISABLE_TELEMETRY: "1",
         CLAUDE_CONFIG_DIR: configDir
       };
-      if (!env.ANTHROPIC_API_KEY) throw new Error("claude backend needs ANTHROPIC_API_KEY (anthropic_api_key input)");
+      if (!env.ANTHROPIC_API_KEY && !env.ANTHROPIC_AUTH_TOKEN) {
+        throw new Error(this.name === "deepseek" ? "deepseek backend needs DEEPSEEK_API_KEY (deepseek_api_key input)" : "claude backend needs ANTHROPIC_API_KEY (anthropic_api_key input)");
+      }
       const args = this.buildArgs(opts);
       const launch = this.o.sandbox ? await sandboxCommand(this.bin, args, opts.cwd, opts.mode, env, [configDir]) : { bin: this.bin, args, env };
       const r = await spawnCollect(launch.bin, launch.args, {
@@ -45548,10 +45548,20 @@ ${content}=======
 };
 
 // src/agents/index.ts
+var DEEPSEEK_ENV = {
+  ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic",
+  ANTHROPIC_DEFAULT_OPUS_MODEL: "deepseek-flash[1m]",
+  ANTHROPIC_DEFAULT_SONNET_MODEL: "deepseek-flash[1m]",
+  ANTHROPIC_DEFAULT_HAIKU_MODEL: "deepseek-flash",
+  CLAUDE_CODE_SUBAGENT_MODEL: "deepseek-flash",
+  CLAUDE_CODE_EFFORT_LEVEL: "max",
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW: "786432"
+};
 function createBackend(name, inputs, log) {
   switch (name) {
+    case "deepseek":
     case "claude":
-      return new ClaudeBackend({ log, sandbox: inputs.sandbox ?? false, installVersion: inputs.claudeVersion ?? CLAUDE_VERSION });
+      return new ClaudeBackend({ name, log, sandbox: inputs.sandbox ?? false, installVersion: inputs.claudeVersion ?? CLAUDE_VERSION });
     case "codex":
       return new CodexBackend({ log, sandbox: inputs.sandbox ?? false, installVersion: inputs.codexVersion ?? CODEX_VERSION });
     case "fake":
@@ -45560,6 +45570,10 @@ function createBackend(name, inputs, log) {
 }
 function backendEnv(name, inputs) {
   switch (name) {
+    case "deepseek": {
+      const key = inputs.deepseekApiKey ?? process.env.DEEPSEEK_API_KEY;
+      return key ? { ...DEEPSEEK_ENV, ANTHROPIC_AUTH_TOKEN: key } : {};
+    }
     case "claude":
       return inputs.anthropicApiKey ? { ANTHROPIC_API_KEY: inputs.anthropicApiKey } : {};
     case "codex":
@@ -47481,7 +47495,7 @@ async function run(inputs, env, deps) {
       workflowPaths: []
     };
     workPlan = plan;
-    const independent = !!inputs.reviewer && (inputs.reviewer.backend !== inputs.worker.backend || inputs.worker.backend === "fake");
+    const independent = !!inputs.reviewer;
     const deterministic = plan.patches.length === 0 || plan.upstreamCommits === 0;
     const autoEligible = (independent || deterministic) && !!inputs.verifyCommand && !!(checkpointSha || inputs.initialBase);
     if (!autoEligible) report.notes.push("automatic publishing requires independent review, verify_command, and an existing upstream checkpoint or explicit initial_base; candidate will be staged");

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseInputs, type RawInputs } from '../src/inputs.js';
+import { DEFAULT_AGENT, parseInputs, type RawInputs } from '../src/inputs.js';
 
 function raw(overrides: Partial<RawInputs> = {}): RawInputs {
   return {
@@ -49,6 +49,14 @@ describe('parseInputs', () => {
     const i = parseInputs(raw({ worker: 'fake', reviewer: '' }));
     expect(i.worker).toEqual({ backend: 'fake', model: '' });
     expect(i.reviewer).toBeUndefined();
+    expect(parseInputs(raw({ reviewer: 'none' })).reviewer).toBeUndefined();
+  });
+
+  it('parses the DeepSeek default for both roles', () => {
+    const i = parseInputs(raw({ worker: DEFAULT_AGENT, reviewer: DEFAULT_AGENT, deepseekApiKey: 'ds' }));
+    expect(i.worker).toEqual({ backend: 'deepseek', model: 'deepseek-flash[1m]' });
+    expect(i.reviewer).toEqual(i.worker);
+    expect(i.deepseekApiKey).toBe('ds');
   });
 
   it('rejects unknown backends and missing models with the input name', () => {

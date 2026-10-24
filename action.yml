@@ -67,12 +67,13 @@ inputs:
       Workflows, and Issues write. Never pass a publishing credential to prepare or verify.
     required: true
   worker:
-    description: Worker agent as backend:model, e.g. claude:claude-opus-5-5 or codex:gpt-6.1-sol.
+    description: Worker agent as backend:model. Default is Claude Code against the DeepSeek API; claude:<model> and codex:<model> remain available.
     required: false
+    default: 'deepseek:deepseek-flash[1m]'
   reviewer:
-    description: Reviewer agent as backend:model. Use a different provider. Empty disables review.
+    description: Reviewer agent as backend:model. Defaults to a second DeepSeek-backed Claude Code instance; "none" disables review.
     required: false
-    default: ''
+    default: 'deepseek:deepseek-flash[1m]'
   max_rounds:
     description: Maximum consensus rounds before the result is treated as contested.
     required: false
@@ -113,6 +114,9 @@ inputs:
     description: Do everything except push.
     required: false
     default: 'false'
+  deepseek_api_key:
+    description: API key for the deepseek backend (DEEPSEEK_API_KEY). Also read from the environment when unset.
+    required: false
   anthropic_api_key:
     description: API key for the claude backend.
     required: false

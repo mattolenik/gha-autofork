@@ -19,11 +19,12 @@ on:
         type: string
         default: ''
       worker:
-        required: true
         type: string
+        default: 'deepseek:deepseek-flash[1m]'
       reviewer:
+        description: Second agent; "none" disables review.
         type: string
-        default: ''
+        default: 'deepseek:deepseek-flash[1m]'
       verify_command:
         type: string
         default: ''
@@ -64,6 +65,8 @@ on:
         required: false
       upstream_token:
         description: Optional read-only token for a private upstream
+        required: false
+      deepseek_api_key:
         required: false
       anthropic_api_key:
         required: false
@@ -120,6 +123,7 @@ jobs:
           claude_version: ${{ inputs.claude_version }}
           codex_version: ${{ inputs.codex_version }}
           dry_run: ${{ inputs.dry_run }}
+          deepseek_api_key: ${{ secrets.deepseek_api_key }}
           anthropic_api_key: ${{ secrets.anthropic_api_key }}
           openai_api_key: ${{ secrets.openai_api_key }}
       - id: candidate

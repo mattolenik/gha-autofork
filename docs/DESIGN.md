@@ -117,7 +117,8 @@ an explicit original-patch comparison rather than ignoring a failed range-diff i
    fold into one named patch or, when no target is supplied, a patch selected by file history.
 7. Stop at the round limit or when normalized issues persist without candidate changes.
 
-Provider diversity improves review independence; it does not prove semantic correctness. Meaningful
+Provider diversity improves review independence but is not required for automatic publication; the
+default runs two instances of one provider. Neither proves semantic correctness. Meaningful
 project verification remains necessary. The `fake` backend is exclusively a test fixture mechanism.
 
 ## State transitions and publication policy
@@ -126,7 +127,7 @@ project verification remains necessary. The `fake` backend is exclusively a test
 |---|---|---|---|
 | Upstream unchanged | NOTHING_TO_DO, unless initialization was explicitly requested | skipped, or normal initialization verification | skipped, or atomic checkpoint initialization |
 | Linear rebase or patchless fast-forward | PREPARED after gates/consensus | VERIFIED for exact candidate | STAGED or APPROVED/FAST_FORWARDED |
-| Missing independent review, verification, or initialization | Candidate may be prepared | Structural gates still apply | STAGED |
+| Missing reviewer, verification, or initialization | Candidate may be prepared | Structural gates still apply | STAGED |
 | `publish=stage` | Same preparation | Same verification | Temporary ref only |
 | `dry_run=true` | Same preparation | Same verification | No remote ref or issue changes |
 | Fork notes enabled | Previous notes commit excluded from the series; regenerated and committed above the approved result | Verified as part of the candidate | Accounting requires the notes commit above the survivors, touching only FORK.md and the README |
@@ -136,7 +137,7 @@ project verification remains necessary. The `fake` backend is exclusively a test
 | Concurrent maintained-branch/checkpoint update | — | — | FAILED_PUBLISH, lease protects refs |
 | Cleanup error after successful transaction | — | — | Successful state with warnings |
 
-Automatic publication of a patch series requires independent review, verification, and an initialized upstream anchor.
+Automatic publication of a patch series requires a configured reviewer, verification, and an initialized upstream anchor.
 `publish` defaults to `auto`; staging is an explicit choice or the fallback when eligibility is missing.
 The first publication requires an explicit inspected `initial_base`; subsequent runs use
 `refs/autofork/upstream/<branch>`. The anchor must be an ancestor of both fork and upstream. A rewritten
@@ -187,7 +188,10 @@ an allowlist of Git subcommands; reviewers use `--restricted` with Read/Grep/Glo
 `exec --json --output-schema --output-last-message --ephemeral --ignore-user-config --ignore-rules`,
 `project_doc_max_bytes=0`, `approval_policy=never`, and workspace-write/read-only tool sandboxes with
 workspace network disabled. Its system instructions are prepended because the tested CLI has no
-supported system-prompt flag. Both CLIs run inside the outer OS sandbox.
+supported system-prompt flag. Both CLIs run inside the outer OS sandbox. The `deepseek` backend is
+the same Claude Code adapter with `ANTHROPIC_BASE_URL` set to DeepSeek's Anthropic-compatible endpoint
+and `DEEPSEEK_API_KEY` passed as `ANTHROPIC_AUTH_TOKEN`; it is the default for both roles, so the
+default configuration trades cross-provider review independence for a single key and provider.
 
 The sandbox masks `/run` but restores `/run/systemd/resolve` read-only so Ubuntu resolver symlinks work.
 Hosted-runner CI checks both the actual bubblewrap/AppArmor interaction and DNS to the provider hosts.

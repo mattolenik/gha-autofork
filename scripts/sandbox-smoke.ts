@@ -12,7 +12,7 @@ try {
   await git.run(['init', '-q']);
   await git.run(['commit', '--allow-empty', '-qm', 'sandbox smoke']);
   console.log(`Host resolver: ${await fs.realpath('/etc/resolv.conf')}`);
-  const script = 'const dns = require("node:dns").promises; Promise.all(["api.anthropic.com", "api.openai.com"].map(h => dns.lookup(h).then(() => console.log(h + ": DNS OK")))).catch(e => { console.error(e); process.exit(1); });';
+  const script = 'const dns = require("node:dns").promises; Promise.all(["api.deepseek.com", "api.anthropic.com", "api.openai.com"].map(h => dns.lookup(h).then(() => console.log(h + ": DNS OK")))).catch(e => { console.error(e); process.exit(1); });';
   const launch = await sandboxCommand(process.execPath, ['-e', script], root, 'readonly', buildChildEnv());
   const result = await spawnCollect(launch.bin, launch.args, { cwd: root, env: launch.env, timeoutMs: 30000, backendName: 'DNS smoke' });
   if (result.code !== 0) throw new Error(result.stderr || result.stdout);

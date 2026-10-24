@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ClaudeBackend, parseClaudeOutput } from '../src/agents/claude.js';
 import { CodexBackend, parseCodexOutput } from '../src/agents/codex.js';
-import { createBackend } from '../src/agents/index.js';
+import { backendEnv, createBackend } from '../src/agents/index.js';
 import type { Inputs } from '../src/inputs.js';
 import type { AgentRunOptions } from '../src/agents/types.js';
 import { buildChildEnv, forbiddenKeys } from '../src/env.js';
@@ -134,6 +134,23 @@ describe('ClaudeBackend', () => {
   it('refuses to run without an API key', async () => {
     const b = new ClaudeBackend({ log: silentLogger, bin: path.join(bin, 'claude') });
     await expect(b.run('x', opts({ env: buildChildEnv({ STUB_OUT: tmp }) }))).rejects.toThrow(/ANTHROPIC_API_KEY/);
+    const d = new ClaudeBackend({ name: 'deepseek', log: silentLogger, bin: path.join(bin, 'claude') });
+    await expect(d.run('x', opts({ env: buildChildEnv({ STUB_OUT: tmp }) }))).rejects.toThrow(/DEEPSEEK_API_KEY/);
+  });
+
+  it('runs against DeepSeek with the documented environment and the key as the auth token', async () => {
+    const b = createBackend('deepseek', { sandbox: false } as Inputs, silentLogger) as ClaudeBackend;
+    expect(b.name).toBe('deepseek');
+    const extra = backendEnv('deepseek', { deepseekApiKey: 'ds-test' } as Inputs);
+    expect(extra).toMatchObject({ ANTHROPIC_AUTH_TOKEN: 'ds-test', ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'deepseek-flash' });
+    expect(backendEnv('deepseek', {} as Inputs)).toEqual(process.env.DEEPSEEK_API_KEY ? expect.anything() : {});
+    const stub = new ClaudeBackend({ name: 'deepseek', log: silentLogger, bin: path.join(bin, 'claude') });
+    const r = await stub.run('x', opts({ env: buildChildEnv({ ...extra, STUB_OUT: tmp, STUB_RESPONSE: path.join(cliOut, 'claude-result.json') }) }));
+    expect(r.exitCode).toBe(0);
+    const envDump = await fs.readFile(path.join(tmp, 'env'), 'utf8');
+    expect(envDump).toContain('ANTHROPIC_AUTH_TOKEN=ds-test');
+    expect(envDump).toContain('ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic');
+    expect(envDump).not.toContain('ANTHROPIC_API_KEY=');
   });
 
   it('parses error results and line-delimited output', () => {

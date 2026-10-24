@@ -14,6 +14,8 @@ export const CLAUDE_INSTALL_URL = 'https://claude.ai/install.sh';
 export const CLAUDE_VERSION = '2.1.288';
 
 export interface ClaudeBackendOptions {
+  /** Reported backend name; "deepseek" is the same CLI with DeepSeek's endpoint in the environment. */
+  name?: 'claude' | 'deepseek';
   bin?: string;
   /** Exact tested version; defaults to CLAUDE_VERSION. */
   installVersion?: string;
@@ -34,15 +36,16 @@ interface ClaudeJsonResult {
 
 /**
  * Claude Code in bare print mode. `--bare` disables CLAUDE.md discovery, hooks, plugins, MCP and the
- * keychain, so the only authentication is ANTHROPIC_API_KEY and the only instructions are ours.
+ * keychain, so the only authentication is ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN and the only instructions are ours.
  */
 export class ClaudeBackend implements AgentBackend {
-  readonly name = 'claude';
+  readonly name: string;
   readonly capabilities = { turnLimit: true, budgetLimit: true, costReporting: true };
   version: string | undefined;
   private bin: string;
 
   constructor(private readonly o: ClaudeBackendOptions) {
+    this.name = o.name ?? 'claude';
     this.bin = o.bin ?? 'claude';
   }
 
@@ -122,7 +125,9 @@ export class ClaudeBackend implements AgentBackend {
         DISABLE_TELEMETRY: '1',
         CLAUDE_CONFIG_DIR: configDir,
       };
-      if (!env.ANTHROPIC_API_KEY) throw new Error('claude backend needs ANTHROPIC_API_KEY (anthropic_api_key input)');
+      if (!env.ANTHROPIC_API_KEY && !env.ANTHROPIC_AUTH_TOKEN) {
+        throw new Error(this.name === 'deepseek' ? 'deepseek backend needs DEEPSEEK_API_KEY (deepseek_api_key input)' : 'claude backend needs ANTHROPIC_API_KEY (anthropic_api_key input)');
+      }
       const args = this.buildArgs(opts);
       const launch = this.o.sandbox ? await sandboxCommand(this.bin, args, opts.cwd, opts.mode, env, [configDir]) : { bin: this.bin, args, env };
       const r = await spawnCollect(launch.bin, launch.args, {

@@ -1,8 +1,10 @@
 import * as core from '@actions/core';
 import { z } from 'zod';
 
-export const BACKENDS = ['claude', 'codex', 'fake'] as const;
+export const BACKENDS = ['deepseek', 'claude', 'codex', 'fake'] as const;
 export type BackendName = (typeof BACKENDS)[number];
+/** Default for both roles: Claude Code against DeepSeek's Anthropic-compatible endpoint. */
+export const DEFAULT_AGENT = 'deepseek:deepseek-flash[1m]';
 
 export interface AgentSpec {
   backend: BackendName;
@@ -69,7 +71,7 @@ export const inputsSchema = z.object({
   reviewer: z
     .string()
     .trim()
-    .transform((s) => (s === '' ? undefined : s))
+    .transform((s) => (s === '' || s === 'none' ? undefined : s))
     .pipe(agentSpecSchema.optional()),
   maxRounds: intString(1),
   verifyCommand: optionalString,
@@ -81,6 +83,7 @@ export const inputsSchema = z.object({
   publish: z.enum(['auto', 'stage']),
   installClis: boolString,
   dryRun: boolString,
+  deepseekApiKey: optionalString.optional(),
   anthropicApiKey: optionalString,
   openaiApiKey: optionalString,
   forkRemoteUrl: optionalString,
@@ -125,6 +128,7 @@ const INPUT_NAMES: { [K in keyof Inputs]-?: string } = {
   publish: 'publish',
   installClis: 'install_clis',
   dryRun: 'dry_run',
+  deepseekApiKey: 'deepseek_api_key',
   anthropicApiKey: 'anthropic_api_key',
   openaiApiKey: 'openai_api_key',
   forkRemoteUrl: 'fork_remote_url',
@@ -152,7 +156,7 @@ export function readRawInputs(): RawInputs {
     out[key] = core.getInput(INPUT_NAMES[key]);
   }
   if (!out.phase) out.phase = 'prepare';
-  if (out.phase !== 'prepare' && !out.worker) out.worker = 'fake';
+  if (!out.worker) out.worker = out.phase === 'prepare' ? DEFAULT_AGENT : 'fake';
   return out;
 }
 
@@ -166,13 +170,7 @@ export function parseInputs(raw: RawInputs): Inputs {
     });
     throw new Error(`invalid inputs:\n${lines.join('\n')}`);
   }
-  const inputs = result.data;
-  if (inputs.reviewer && inputs.reviewer.backend === inputs.worker.backend && inputs.worker.backend !== 'fake') {
-    core.warning(
-      `worker and reviewer both use the "${inputs.worker.backend}" backend; a different provider gives a more independent review`,
-    );
-  }
-  return inputs;
+  return result.data;
 }
 
 export function describeAgent(spec: AgentSpec): string {
