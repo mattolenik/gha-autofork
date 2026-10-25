@@ -5,8 +5,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ClaudeBackend, parseClaudeOutput } from '../src/agents/claude.js';
 import { CodexBackend, parseCodexOutput } from '../src/agents/codex.js';
 import { backendEnv, createBackend } from '../src/agents/index.js';
+import { AgentRunner, READONLY_MAX_TURNS } from '../src/agents/runner.js';
+import { Budget } from '../src/budget.js';
 import type { Inputs } from '../src/inputs.js';
-import type { AgentRunOptions } from '../src/agents/types.js';
+import type { AgentBackend, AgentRunOptions } from '../src/agents/types.js';
 import { buildChildEnv, forbiddenKeys } from '../src/env.js';
 import { silentLogger } from '../src/log.js';
 import { resolveReportSchema, reviewVerdictSchema, toJsonSchema } from '../src/schemas.js';
@@ -91,6 +93,21 @@ describe('configured CLI versions', () => {
   });
 });
 
+describe('AgentRunner', () => {
+  it('caps read-only calls below max_turns', async () => {
+    const seen: number[] = [];
+    const backend: AgentBackend = { name: 'stub', async ensureInstalled() {}, async run(_p, o) {
+      seen.push(o.maxTurns);
+      return { structured: { complete: true, concerns: [], summary: 'ok' }, text: '', costUsd: null, turns: 1, raw: '', exitCode: 0 };
+    } };
+    const runner = new AgentRunner({ backend, model: 'm', role: 'worker', budget: new Budget(1), maxTurns: 60, timeoutMs: 1000, env: {}, transcriptsDir: null, log: silentLogger });
+    const call = { schemaName: 'selfcheck' as const, system: 's', user: 'u', cwd: tmp };
+    await runner.structured({ ...call, mode: 'readonly' });
+    await runner.structured({ ...call, mode: 'edit' });
+    expect(seen).toEqual([READONLY_MAX_TURNS, 60]);
+  });
+});
+
 describe('ClaudeBackend', () => {
   it('builds hardened arguments for edit and readonly modes', () => {
     const b = new ClaudeBackend({ log: silentLogger });
@@ -107,9 +124,13 @@ describe('ClaudeBackend', () => {
     expect(edit[edit.indexOf('--model') + 1]).toBe('test-model');
 
     const ro = b.buildArgs(opts({ mode: 'readonly' }));
-    expect(ro).toContain('--restricted');
-    expect(ro[ro.indexOf('--tools') + 1]).toBe('Read,Grep,Glob');
-    expect(ro.join(' ')).not.toContain('Bash');
+    expect(ro[ro.indexOf('--tools') + 1]).toBe('Read,Grep,Glob,Bash');
+    expect(ro).toContain('Bash(git diff:*)');
+    expect(ro.slice(ro.indexOf('--allowedTools'))).not.toContain('Edit');
+    expect(ro.slice(ro.indexOf('--allowedTools'))).not.toContain('Write');
+    expect(ro).toContain('--max-budget-usd');
+    const ds = new ClaudeBackend({ name: 'deepseek', log: silentLogger }).buildArgs(opts({ mode: 'edit' }));
+    expect(ds).not.toContain('--max-budget-usd');
   });
 
   it('runs the CLI with the prompt on stdin, a scrubbed environment, and parses the result', async () => {
@@ -147,6 +168,8 @@ describe('ClaudeBackend', () => {
     const stub = new ClaudeBackend({ name: 'deepseek', log: silentLogger, bin: path.join(bin, 'claude') });
     const r = await stub.run('x', opts({ env: buildChildEnv({ ...extra, STUB_OUT: tmp, STUB_RESPONSE: path.join(cliOut, 'claude-result.json') }) }));
     expect(r.exitCode).toBe(0);
+    expect(r.costUsd).toBeNull(); // Claude Code's dollars for an unknown model are not DeepSeek billing
+    expect(stub.capabilities).toEqual({ turnLimit: true, budgetLimit: false, costReporting: false });
     const envDump = await fs.readFile(path.join(tmp, 'env'), 'utf8');
     expect(envDump).toContain('ANTHROPIC_AUTH_TOKEN=ds-test');
     expect(envDump).toContain('ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic');

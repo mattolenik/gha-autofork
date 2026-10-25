@@ -44617,6 +44617,7 @@ var AgentTimeoutError = class extends Error {
   backend;
   timeoutMs;
 };
+var READONLY_MAX_TURNS = 15;
 var AgentRunner = class {
   constructor(o) {
     this.o = o;
@@ -44665,7 +44666,7 @@ Answer again with a single JSON object that matches the schema exactly.`;
         jsonSchema,
         mode: call.mode,
         systemPrompt: call.system,
-        maxTurns: this.o.maxTurns,
+        maxTurns: call.mode === "readonly" ? Math.min(this.o.maxTurns, READONLY_MAX_TURNS) : this.o.maxTurns,
         maxBudgetUsd: Math.max(0, this.o.budget.maxUsd - this.o.budget.spentUsd) || null,
         timeoutMs: this.o.timeoutMs,
         env: this.o.env,
@@ -45109,10 +45110,12 @@ var ClaudeBackend = class {
     this.o = o;
     this.name = o.name ?? "claude";
     this.bin = o.bin ?? "claude";
+    const priced = this.name === "claude";
+    this.capabilities = { turnLimit: true, budgetLimit: priced, costReporting: priced };
   }
   o;
   name;
-  capabilities = { turnLimit: true, budgetLimit: true, costReporting: true };
+  capabilities;
   version;
   bin;
   async ensureInstalled(install) {
@@ -45175,13 +45178,10 @@ var ClaudeBackend = class {
       "WebFetch,WebSearch,Task,NotebookEdit"
     ];
     if (opts.model) args.push("--model", opts.model);
-    if (opts.maxBudgetUsd !== null && opts.maxBudgetUsd > 0) args.push("--max-budget-usd", opts.maxBudgetUsd.toFixed(2));
-    if (opts.mode === "edit") {
-      args.push("--tools", "Read,Edit,Write,Grep,Glob,Bash");
-      args.push("--allowedTools", "Read", "Edit", "Write", "Grep", "Glob", ...READ_ONLY_GIT.map((s) => `Bash(git ${s}:*)`));
-    } else {
-      args.push("--restricted", "--tools", "Read,Grep,Glob", "--allowedTools", "Read", "Grep", "Glob");
-    }
+    if (this.capabilities.budgetLimit && opts.maxBudgetUsd !== null && opts.maxBudgetUsd > 0) args.push("--max-budget-usd", opts.maxBudgetUsd.toFixed(2));
+    const tools = opts.mode === "edit" ? ["Read", "Edit", "Write", "Grep", "Glob"] : ["Read", "Grep", "Glob"];
+    args.push("--tools", [...tools, "Bash"].join(","));
+    args.push("--allowedTools", ...tools, ...READ_ONLY_GIT.map((s) => `Bash(git ${s}:*)`));
     return args;
   }
   async run(prompt, opts) {
@@ -45207,7 +45207,8 @@ var ClaudeBackend = class {
         backendName: this.name,
         streamTo: opts.transcriptPath
       });
-      return parseClaudeOutput(r.stdout, r.stderr, r.code);
+      const result = parseClaudeOutput(r.stdout, r.stderr, r.code);
+      return this.capabilities.costReporting ? result : { ...result, costUsd: null };
     } finally {
       await fs8.rm(configDir, { recursive: true, force: true });
     }

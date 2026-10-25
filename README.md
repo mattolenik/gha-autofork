@@ -209,8 +209,11 @@ version is recorded in results. API-key authentication is supported, not subscri
 
 Claude supports turn and per-call dollar limits. The orchestrator stops before another call when its
 known budget is exhausted. Codex supports neither limit and does not report dollars: its calls appear
-as `unpricedCalls`, and reported total spend is explicitly incomplete. Wall-clock timeouts apply to
-both backends. Set `require_hard_limits: true` to reject unsupported backends. Even supported CLI dollar
+as `unpricedCalls`, and reported total spend is explicitly incomplete. The `deepseek` backend keeps the
+turn limit but discards Claude Code's dollar figures, which are priced from its own table for an unknown
+model name rather than DeepSeek billing; its calls are unpriced too. Read-only calls (self-check, review,
+summaries) are capped at 15 turns regardless of `max_turns`. Wall-clock timeouts apply to every backend.
+Set `require_hard_limits: true` to reject backends without both limits. Even supported CLI dollar
 limits are provider-reported controls, not a guarantee about final billing.
 
 For additional egress control, consider `step-security/harden-runner` in a copied/custom phase workflow.
@@ -225,9 +228,8 @@ The default for both roles is `deepseek:deepseek-flash[1m]`: the pinned Claude C
 `ANTHROPIC_AUTH_TOKEN`, following [DeepSeek's Claude Code guide](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code).
 `deepseek:deepseek-v4-pro` selects the stronger model. Worker and reviewer are separate processes with
 separate worktrees but share one provider; cross-provider review is available by choosing different
-backends, not the default. Dollar figures for the `deepseek` backend come from Claude Code's own
-pricing table for the model name, not DeepSeek billing, so treat `max_cost_usd` as approximate there and
-rely on `max_turns` and the wall-clock limit.
+backends, not the default. `max_cost_usd` does not apply to `deepseek` (see limits above); `max_turns`
+and the wall-clock limit are its controls.
 
 Any model ID accepted by the configured CLI can be selected as `backend:model`. Examples are
 `claude:claude-opus-5-5` and `codex:gpt-6.1-sol`; check each provider/CLI for current available IDs and

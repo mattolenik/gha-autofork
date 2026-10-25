@@ -14,6 +14,9 @@ export class AgentTimeoutError extends Error {
   }
 }
 
+/** Self-checks, reviews, and summaries answer from the prompt's range-diff; a model that keeps hunting instead fails fast. */
+export const READONLY_MAX_TURNS = 15;
+
 export interface AgentRunnerOptions {
   backend: AgentBackend;
   model: string;
@@ -84,7 +87,7 @@ export class AgentRunner {
         jsonSchema,
         mode: call.mode,
         systemPrompt: call.system,
-        maxTurns: this.o.maxTurns,
+        maxTurns: call.mode === 'readonly' ? Math.min(this.o.maxTurns, READONLY_MAX_TURNS) : this.o.maxTurns,
         maxBudgetUsd: Math.max(0, this.o.budget.maxUsd - this.o.budget.spentUsd) || null,
         timeoutMs: this.o.timeoutMs,
         env: this.o.env,

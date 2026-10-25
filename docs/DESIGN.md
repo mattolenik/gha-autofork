@@ -184,7 +184,8 @@ process-group wall-clock timeouts apply to all invocations.
 
 Claude uses `--bare -p`, `--output-format json`, `--json-schema`, `--system-prompt`, `dontAsk`,
 `--no-session-persistence`, and `--strict-mcp-config`. Editing tools are Read/Edit/Write/Grep/Glob plus
-an allowlist of Git subcommands; reviewers use `--restricted` with Read/Grep/Glob. Codex uses
+an allowlist of Git subcommands; read-only calls (self-check, review, summaries) get Read/Grep/Glob plus
+the same Git allowlist, with the sandbox mounting their worktree read-only and a 15-turn cap. Codex uses
 `exec --json --output-schema --output-last-message --ephemeral --ignore-user-config --ignore-rules`,
 `project_doc_max_bytes=0`, `approval_policy=never`, and workspace-write/read-only tool sandboxes with
 workspace network disabled. Its system instructions are prepended because the tested CLI has no

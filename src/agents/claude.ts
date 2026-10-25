@@ -40,13 +40,17 @@ interface ClaudeJsonResult {
  */
 export class ClaudeBackend implements AgentBackend {
   readonly name: string;
-  readonly capabilities = { turnLimit: true, budgetLimit: true, costReporting: true };
+  readonly capabilities: { turnLimit: boolean; budgetLimit: boolean; costReporting: boolean };
   version: string | undefined;
   private bin: string;
 
   constructor(private readonly o: ClaudeBackendOptions) {
     this.name = o.name ?? 'claude';
     this.bin = o.bin ?? 'claude';
+    // Claude Code prices unknown model names from its own table (costBasis "unknown"), so dollars
+    // reported for DeepSeek are fiction: neither trusted nor used as a per-call limit.
+    const priced = this.name === 'claude';
+    this.capabilities = { turnLimit: true, budgetLimit: priced, costReporting: priced };
   }
 
   async ensureInstalled(install: boolean): Promise<void> {
@@ -105,13 +109,11 @@ export class ClaudeBackend implements AgentBackend {
       'WebFetch,WebSearch,Task,NotebookEdit',
     ];
     if (opts.model) args.push('--model', opts.model);
-    if (opts.maxBudgetUsd !== null && opts.maxBudgetUsd > 0) args.push('--max-budget-usd', opts.maxBudgetUsd.toFixed(2));
-    if (opts.mode === 'edit') {
-      args.push('--tools', 'Read,Edit,Write,Grep,Glob,Bash');
-      args.push('--allowedTools', 'Read', 'Edit', 'Write', 'Grep', 'Glob', ...READ_ONLY_GIT.map((s) => `Bash(git ${s}:*)`));
-    } else {
-      args.push('--restricted', '--tools', 'Read,Grep,Glob', '--allowedTools', 'Read', 'Grep', 'Glob');
-    }
+    if (this.capabilities.budgetLimit && opts.maxBudgetUsd !== null && opts.maxBudgetUsd > 0) args.push('--max-budget-usd', opts.maxBudgetUsd.toFixed(2));
+    // Read-only calls keep the git allowlist (the prompts promise it); the sandbox mounts their worktree read-only.
+    const tools = opts.mode === 'edit' ? ['Read', 'Edit', 'Write', 'Grep', 'Glob'] : ['Read', 'Grep', 'Glob'];
+    args.push('--tools', [...tools, 'Bash'].join(','));
+    args.push('--allowedTools', ...tools, ...READ_ONLY_GIT.map((s) => `Bash(git ${s}:*)`));
     return args;
   }
 
@@ -138,7 +140,8 @@ export class ClaudeBackend implements AgentBackend {
         backendName: this.name,
         streamTo: opts.transcriptPath,
       });
-      return parseClaudeOutput(r.stdout, r.stderr, r.code);
+      const result = parseClaudeOutput(r.stdout, r.stderr, r.code);
+      return this.capabilities.costReporting ? result : { ...result, costUsd: null };
     } finally {
       await fs.rm(configDir, { recursive: true, force: true });
     }
