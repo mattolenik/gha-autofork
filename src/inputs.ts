@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const BACKENDS = ['deepseek', 'claude', 'codex', 'fake'] as const;
 export type BackendName = (typeof BACKENDS)[number];
 /** Default for both roles: Claude Code against DeepSeek's Anthropic-compatible endpoint. */
-export const DEFAULT_AGENT = 'deepseek:deepseek-flash[1m]';
+export const DEFAULT_AGENT = 'deepseek:deepseek-v4-pro';
 
 export interface AgentSpec {
   backend: BackendName;

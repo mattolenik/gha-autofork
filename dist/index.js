@@ -44219,7 +44219,7 @@ function date4(params) {
 
 // src/inputs.ts
 var BACKENDS = ["deepseek", "claude", "codex", "fake"];
-var DEFAULT_AGENT = "deepseek:deepseek-flash[1m]";
+var DEFAULT_AGENT = "deepseek:deepseek-v4-pro";
 var agentSpecSchema = external_exports.string().trim().transform((raw, ctx) => {
   const idx = raw.indexOf(":");
   const backend = (idx === -1 ? raw : raw.slice(0, idx)).trim();
@@ -45551,7 +45551,7 @@ ${content}=======
 // src/agents/index.ts
 var DEEPSEEK_ENV = {
   ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic",
-  ANTHROPIC_DEFAULT_OPUS_MODEL: "deepseek-flash[1m]",
+  ANTHROPIC_DEFAULT_OPUS_MODEL: "deepseek-v4-pro",
   ANTHROPIC_DEFAULT_SONNET_MODEL: "deepseek-flash[1m]",
   ANTHROPIC_DEFAULT_HAIKU_MODEL: "deepseek-flash",
   CLAUDE_CODE_SUBAGENT_MODEL: "deepseek-flash",

@@ -54,7 +54,7 @@ describe('parseInputs', () => {
 
   it('parses the DeepSeek default for both roles', () => {
     const i = parseInputs(raw({ worker: DEFAULT_AGENT, reviewer: DEFAULT_AGENT, deepseekApiKey: 'ds' }));
-    expect(i.worker).toEqual({ backend: 'deepseek', model: 'deepseek-flash[1m]' });
+    expect(i.worker).toEqual({ backend: 'deepseek', model: 'deepseek-v4-pro' });
     expect(i.reviewer).toEqual(i.worker);
     expect(i.deepseekApiKey).toBe('ds');
   });

@@ -20,11 +20,11 @@ on:
         default: ''
       worker:
         type: string
-        default: 'deepseek:deepseek-flash[1m]'
+        default: 'deepseek:deepseek-v4-pro'
       reviewer:
         description: Second agent; "none" disables review.
         type: string
-        default: 'deepseek:deepseek-flash[1m]'
+        default: 'deepseek:deepseek-v4-pro'
       verify_command:
         type: string
         default: ''

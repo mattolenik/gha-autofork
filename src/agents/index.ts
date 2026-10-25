@@ -8,7 +8,7 @@ import type { AgentBackend } from './types.js';
 /** Claude Code pointed at DeepSeek, per https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code */
 export const DEEPSEEK_ENV = {
   ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
-  ANTHROPIC_DEFAULT_OPUS_MODEL: 'deepseek-flash[1m]',
+  ANTHROPIC_DEFAULT_OPUS_MODEL: 'deepseek-v4-pro',
   ANTHROPIC_DEFAULT_SONNET_MODEL: 'deepseek-flash[1m]',
   ANTHROPIC_DEFAULT_HAIKU_MODEL: 'deepseek-flash',
   CLAUDE_CODE_SUBAGENT_MODEL: 'deepseek-flash',

@@ -113,7 +113,7 @@ jobs with trusted job outputs and immutable artifact IDs. Never give prepare/ver
 | `token` | required | Read credential in prepare/verify; write credential in publish/report |
 | `upstream_token` | empty | Separate read credential for a private upstream |
 | `initial_base` | empty | Explicit first-run merge-base SHA |
-| `worker` / `reviewer` | `deepseek:deepseek-flash[1m]` | `deepseek:model`, `claude:model`, or `codex:model`; reviewer `none` disables review |
+| `worker` / `reviewer` | `deepseek:deepseek-v4-pro` | `deepseek:model`, `claude:model`, or `codex:model`; reviewer `none` disables review |
 | `verify_command` | empty | Verification command from trusted workflow configuration |
 | `publish` | `auto` | `auto` or `stage`; missing checks cause staging |
 | `dry_run` | `false` | Do not update remote refs or issues |
@@ -223,10 +223,11 @@ verify command needs. Bubblewrap preserves systemd-resolved's directory under `/
 
 ## Models and real-CLI validation
 
-The default for both roles is `deepseek:deepseek-flash[1m]`: the pinned Claude Code CLI with
+The default for both roles is `deepseek:deepseek-v4-pro`: the pinned Claude Code CLI with
 `ANTHROPIC_BASE_URL` pointed at `https://api.deepseek.com/anthropic` and `DEEPSEEK_API_KEY` passed as
 `ANTHROPIC_AUTH_TOKEN`, following [DeepSeek's Claude Code guide](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code).
-`deepseek:deepseek-v4-pro` selects the stronger model. Worker and reviewer are separate processes with
+`deepseek:deepseek-flash[1m]` is the cheaper tier; it did not finish read-only self-checks within the
+turn cap in testing, so the default is V4 Pro. Worker and reviewer are separate processes with
 separate worktrees but share one provider; cross-provider review is available by choosing different
 backends, not the default. `max_cost_usd` does not apply to `deepseek` (see limits above); `max_turns`
 and the wall-clock limit are its controls.

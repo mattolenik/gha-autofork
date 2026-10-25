@@ -69,11 +69,11 @@ inputs:
   worker:
     description: Worker agent as backend:model. Default is Claude Code against the DeepSeek API; claude:<model> and codex:<model> remain available.
     required: false
-    default: 'deepseek:deepseek-flash[1m]'
+    default: 'deepseek:deepseek-v4-pro'
   reviewer:
     description: Reviewer agent as backend:model. Defaults to a second DeepSeek-backed Claude Code instance; "none" disables review.
     required: false
-    default: 'deepseek:deepseek-flash[1m]'
+    default: 'deepseek:deepseek-v4-pro'
   max_rounds:
     description: Maximum consensus rounds before the result is treated as contested.
     required: false
