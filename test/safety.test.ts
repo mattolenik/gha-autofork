@@ -19,9 +19,10 @@ afterEach(async () => { await fx?.cleanup(); });
 const up = "export function greet(name) {\n  return 'upstream ' + name;\n}\n\nexport const VERSION = 2;\n";
 const fixed = "export function greet(name) {\n  return 'UPSTREAM ' + name.toUpperCase();\n}\n\nexport const VERSION = 2;\n";
 
+// Clean rebases are approved without agent calls, so the reviewed series needs a resolved conflict.
 async function review(script: FakeScript, verifyCommand?: string, maxRounds = 1) {
-  await advanceUpstream(fx, { 'upstream.txt': 'new\n' }, 'upstream');
-  const h = await prepare(fx, script);
+  await advanceUpstream(fx, { 'src/lib.js': up }, 'upstream');
+  const h = await prepare(fx, { resolve: { '*': { files: { 'src/lib.js': fixed } } }, ...script });
   const outcome = await h.run();
   const reviewer = new AgentRunner({ backend: h.backend, model: '', role: 'reviewer', budget: h.budget,
     maxTurns: 10, timeoutMs: 60000, env: {}, transcriptsDir: null, log: silentLogger });

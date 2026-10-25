@@ -23,6 +23,12 @@ function inputs(overrides: Partial<Inputs> = {}): Inputs {
 }
 function env(): RunEnv { return { workspace: fx.fork.cwd, runnerTemp: path.join(fx.root, 'runner'), runId: '123', runAttempt: '1', serverUrl: 'https://github.com' }; }
 const originSha = async () => (await fx.fork.out(['ls-remote', 'origin', 'refs/heads/main'])).split('\t')[0];
+const UPSTREAM_GREET = ['export function greet(name) {', "  return 'hello, ' + name + '!';", '}', '', 'export const VERSION = 2;', ''].join('\n');
+const RESOLVED_GREET = ['export function greet(name) {', "  return 'HELLO, ' + name.toUpperCase() + '!';", '}', '', 'export const VERSION = 2;', ''].join('\n');
+// A clean rebase with an all-`=` range-diff is approved without agent calls, so tests that script a
+// rejection need a conflict for the agents to have judged.
+const conflicting = { 'src/lib.js': UPSTREAM_GREET };
+const resolve = { '*': { files: { 'src/lib.js': RESOLVED_GREET } } };
 
 async function prepareCandidate(overrides: Partial<Inputs> = {}) {
   await advanceUpstream(fx, { 'upstream.txt': 'new\n' }, 'upstream');
@@ -89,8 +95,8 @@ describe('isolated phases', () => {
 
   it('stages completed contested candidates even when publish=auto is requested', async () => {
     fx = await createFixture();
-    await advanceUpstream(fx, { 'upstream.txt': 'new\n' }, 'upstream');
-    const failed = await run(inputs(), env(), { log, createBackend: () => new FakeBackend(undefined, { review: [{ verdict: 'reject', summary: 'needs attention' }] }) });
+    await advanceUpstream(fx, conflicting, 'upstream');
+    const failed = await run(inputs(), env(), { log, createBackend: () => new FakeBackend(undefined, { resolve, review: [{ verdict: 'reject', summary: 'needs attention' }] }) });
     expect(failed.state).toBe('FAILED_CONTESTED');
     const staged = await runPhase({ ...inputs(), phase: 'publish', artifactDir: failed.artifactDir!, candidateDigest: failed.artifactDigest! }, env(), { log });
     expect(staged.state, staged.reason).toBe('STAGED');
@@ -186,8 +192,8 @@ describe('isolated phases', () => {
 
   it('files a digest-bound failure report in a separate phase without suggesting promotion of an unpublished branch', async () => {
     fx = await createFixture();
-    await advanceUpstream(fx, { 'upstream.txt': 'new\n' }, 'upstream');
-    const failed = await run(inputs(), env(), { log, createBackend: () => new FakeBackend(undefined, { review: [{ verdict: 'reject', summary: 'cannot approve' }] }) });
+    await advanceUpstream(fx, conflicting, 'upstream');
+    const failed = await run(inputs(), env(), { log, createBackend: () => new FakeBackend(undefined, { resolve, review: [{ verdict: 'reject', summary: 'cannot approve' }] }) });
     expect(failed.state).toBe('FAILED_CONTESTED');
     const dir = path.join(env().runnerTemp, 'autofork/results');
     const bodies: string[] = [];

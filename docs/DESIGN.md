@@ -105,7 +105,8 @@ an explicit original-patch comparison rather than ignoring a failed range-diff i
 
 ## Consensus
 
-1. Run gates. Failures become blocking repair requests.
+1. Run gates. Failures become blocking repair requests. If no conflict was resolved and the range-diff
+   marks every patch `=`, the candidate is approved here without agent calls.
 2. Worker performs a read-only self-check with no outstanding concerns.
 3. Reviewer examines the patch comparison and configured verification log.
 4. Approval requires no blocker/major findings and explicit approval of every worker skip.

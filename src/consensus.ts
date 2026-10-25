@@ -64,6 +64,17 @@ export async function runConsensus(o: ConsensusOptions): Promise<ConsensusResult
   let previousIssueIds: string | null = null;
   let previousChangedFiles = true;
 
+  // No agent touched the tree and git reproduced every patch byte-for-byte: there is no judgment to
+  // check, so skip the agent rounds. The gates (including the verify command) still had to pass.
+  const unchanged = outcome.conflictsResolved === 0 && outcome.records.every((r) => r.result === 'applied')
+    && gates.rangeDiff.trim().split('\n').every((l) => /^\s*\d+:\s+\w+ = /.test(l));
+  if (gates.ok && unchanged) {
+    await assertCandidate(git, gates.candidate);
+    const reason = 'git replayed every patch unchanged with no conflicts (range-diff all "="); agent review skipped';
+    log.info(reason);
+    return { state: 'APPROVED', rounds: history, gates, headSha: await git.revParse('HEAD'), notes, reason };
+  }
+
   const skipped = outcome.records.filter((r) => r.result === 'skipped');
 
   const context = async (selfCheck: RoundHistory['selfCheck']): Promise<ReviewContext> => {

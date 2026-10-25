@@ -212,7 +212,9 @@ known budget is exhausted. Codex supports neither limit and does not report doll
 as `unpricedCalls`, and reported total spend is explicitly incomplete. The `deepseek` backend keeps the
 turn limit but discards Claude Code's dollar figures, which are priced from its own table for an unknown
 model name rather than DeepSeek billing; its calls are unpriced too. Read-only calls (self-check, review,
-summaries) are capped at 15 turns regardless of `max_turns`. Wall-clock timeouts apply to every backend.
+summaries) are capped at 15 turns regardless of `max_turns`. When a rebase needed no conflict resolution
+and `git range-diff` shows every patch unchanged (`=`), the agent self-check and review are skipped: only
+the deterministic gates, including `verify_command`, decide. Wall-clock timeouts apply to every backend.
 Set `require_hard_limits: true` to reject backends without both limits. Even supported CLI dollar
 limits are provider-reported controls, not a guarantee about final billing.
 

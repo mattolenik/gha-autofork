@@ -93,6 +93,16 @@ describe('runConsensus', () => {
     expect(await readFile(s.h.wtDir, 'NOTES.fork.md')).toBe('pending edit\n');
   });
 
+  it('approves a clean rebase deterministically without calling any agent', async () => {
+    fx = await createFixture();
+    const s = await setup({}, { 'src/new.js': 'export const x = 1;\n' });
+    const r = await s.run();
+    expect(r.state).toBe('APPROVED');
+    expect(r.rounds).toHaveLength(0);
+    expect(r.reason).toMatch(/agent review skipped/);
+    expect(calls(s.h)).toEqual([]);
+  });
+
   it('approves in round one when worker and reviewer agree', async () => {
     fx = await createFixture();
     const s = await setup({});
